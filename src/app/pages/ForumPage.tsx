@@ -77,9 +77,17 @@ export function ForumPage() {
   };
 
   const loadPosts = async () => {
-    const response = await api.getPosts({ sort: filter });
-    if (response.success && response.data) {
-      setPosts(response.data);
+    try {
+      const response = await api.getPosts({ sort: filter });
+      if (response.success && response.data && response.data.length > 0) {
+        setPosts(response.data);
+      } else if (response.success && response.data && response.data.length === 0) {
+        // If API returns success but empty array, and we want to keep mock data for demo:
+        // setPosts(mockPosts); // or keep as empty if you prefer
+        console.log('API returned empty posts, showing mock data for demo');
+      }
+    } catch (error) {
+      console.error('Failed to load posts:', error);
     }
   };
 
