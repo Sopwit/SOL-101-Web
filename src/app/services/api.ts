@@ -1,0 +1,240 @@
+import type { User, ForumPost, ShopItem, MarketListing, InventoryItem } from '../types';
+
+const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+const publicAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const API_BASE_URL = `https://${projectId}.supabase.co/functions/v1/make-server-5d6242bb`;
+
+interface ApiResponse<T> {
+  success: boolean;
+  data?: T;
+  error?: string;
+}
+
+export interface WalletAuthHeaders {
+  walletAddress: string;
+  message: string;
+  signature: string;
+}
+
+class ApiService {
+  private async request<T>(
+    endpoint: string,
+    options: RequestInit = {},
+    walletAuth?: WalletAuthHeaders
+  ): Promise<ApiResponse<T>> {
+    try {
+      const url = `${API_BASE_URL}${endpoint}`;
+      console.log(`API Request: ${options.method || 'GET'} ${url}`);
+      
+      const response = await fetch(url, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${publicAnonKey}`,
+          ...(walletAuth
+            ? {
+                'x-wallet-address': walletAuth.walletAddress,
+                'x-wallet-message': walletAuth.message,
+                'x-wallet-signature': walletAuth.signature,
+              }
+            : {}),
+          ...options.headers,
+        },
+      });
+
+      if (!response.ok) {
+        let errorData;
+        try {
+          errorData = await response.json();
+        } catch {
+          errorData = { error: `HTTP ${response.status}: ${response.statusText}` };
+        }
+        console.error(`API Error [${endpoint}]:`, errorData);
+        return { success: false, error: errorData.error || 'Bir hata oluştu' };
+      }
+
+      const data = await response.json();
+      return { success: true, data };
+    } catch (error) {
+      console.error(`Network Error [${endpoint}]:`, error);
+      // Check if it's a network error or CORS issue
+      if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
+        console.error('Possible causes: Server offline, CORS issue, or network problem');
+      }
+      return { success: false, error: 'Bağlantı hatası - Server çalışmıyor olabilir' };
+    }
+  }
+
+  // Profile API
+  async getProfile(walletAddress: string): Promise<ApiResponse<User>> {
+    return this.request(`/profile/${walletAddress}`, { method: 'GET' });
+  }
+
+  async updateProfile(walletAddress: string, data: Partial<User>, walletAuth?: WalletAuthHeaders): Promise<ApiResponse<User>> {
+    return this.request(`/profile/${walletAddress}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }, walletAuth);
+  }
+
+  async getProfileStats(walletAddress: string): Promise<ApiResponse<{
+    level: number;
+    xp: number;
+    xpToNextLevel: number;
+    totalPosts: number;
+    totalItems: number;
+    totalTrades: number;
+    achievements: Array<{
+      id: string;
+      name: string;
+      description: string;
+      icon: string;
+      unlockedAt: string;
+    }>;
+  }>> {
+    return this.request(`/profile/${walletAddress}/stats`, { method: 'GET' });
+  }
+
+  // Inventory API
+  async getInventory(walletAddress: string): Promise<ApiResponse<InventoryItem[]>> {
+    return this.request(`/inventory/${walletAddress}`, { method: 'GET' });
+  }
+
+  async addToInventory(walletAddress: string, itemId: string): Promise<ApiResponse<InventoryItem>> {
+    return this.request(`/inventory/${walletAddress}`, {
+      method: 'POST',
+      body: JSON.stringify({ itemId }),
+    });
+  }
+
+  // Forum API
+  async getPosts(filters?: { tag?: string; sort?: string }): Promise<ApiResponse<ForumPost[]>> {
+    const params = new URLSearchParams();
+    if (filters?.tag) params.append('tag', filters.tag);
+    if (filters?.sort) params.append('sort', filters.sort);
+    
+    return this.request(`/forum/posts?${params.toString()}`, { method: 'GET' });
+  }
+
+  async createPost(walletAddress: string, data: {
+    title: string;
+    content: string;
+    imageUrl?: string;
+    tags: string[];
+  }, walletAuth?: WalletAuthHeaders): Promise<ApiResponse<ForumPost>> {
+    return this.request(`/forum/posts`, {
+      method: 'POST',
+      body: JSON.stringify({ ...data, walletAddress }),
+    }, walletAuth);
+  }
+
+  async likePost(postId: string, walletAddress: string, walletAuth?: WalletAuthHeaders): Promise<ApiResponse<{ liked: boolean }>> {
+    return this.request(`/forum/posts/${postId}/like`, {
+      method: 'POST',
+      body: JSON.stringify({ walletAddress }),
+    }, walletAuth);
+  }
+
+  async getPostsByWallet(walletAddress: string): Promise<ApiResponse<ForumPost[]>> {
+    return this.request(`/forum/posts/user/${walletAddress}`, { method: 'GET' });
+  }
+
+  // Shop API
+  async getShopItems(filters?: { rarity?: string; search?: string }): Promise<ApiResponse<ShopItem[]>> {
+    const params = new URLSearchParams();
+    if (filters?.rarity) params.append('rarity', filters.rarity);
+    if (filters?.search) params.append('search', filters.search);
+    
+    return this.request(`/shop/items?${params.toString()}`, { method: 'GET' });
+  }
+
+  async purchaseItem(walletAddress: string, itemId: string, walletAuth?: WalletAuthHeaders): Promise<ApiResponse<{
+    transaction: string;
+    item: InventoryItem;
+  }>> {
+    return this.request(`/shop/purchase`, {
+      method: 'POST',
+      body: JSON.stringify({ walletAddress, itemId }),
+    }, walletAuth);
+  }
+
+  // Market API
+  async getMarketListings(filters?: { status?: string }): Promise<ApiResponse<MarketListing[]>> {
+    const params = new URLSearchParams();
+    if (filters?.status) params.append('status', filters.status);
+    
+    return this.request(`/market/listings?${params.toString()}`, { method: 'GET' });
+  }
+
+  async createListing(walletAddress: string, data: {
+    offeredItemId: string;
+    wantedType: 'token' | 'item' | 'both';
+    wantedTokenAmount?: number;
+    wantedItemName?: string;
+    note?: string;
+    duration: number; // hours
+  }, walletAuth?: WalletAuthHeaders): Promise<ApiResponse<MarketListing>> {
+    return this.request(`/market/listings`, {
+      method: 'POST',
+      body: JSON.stringify({ ...data, sellerWallet: walletAddress }),
+    }, walletAuth);
+  }
+
+  async createTradeOffer(listingId: string, walletAddress: string, data: {
+    offeredItemId?: string;
+    offeredTokenAmount?: number;
+  }, walletAuth?: WalletAuthHeaders): Promise<ApiResponse<{ tradeId: string }>> {
+    return this.request(`/market/listings/${listingId}/trade`, {
+      method: 'POST',
+      body: JSON.stringify({ ...data, buyerWallet: walletAddress }),
+    }, walletAuth);
+  }
+
+  async getListingsByWallet(walletAddress: string): Promise<ApiResponse<MarketListing[]>> {
+    return this.request(`/market/listings/user/${walletAddress}`, { method: 'GET' });
+  }
+
+  // Game Integration Webhooks
+  async syncGameData(walletAddress: string, gameData: {
+    level?: number;
+    xp?: number;
+    achievements?: string[];
+    itemsEarned?: string[];
+  }): Promise<ApiResponse<{ synced: boolean }>> {
+    return this.request(`/game/sync`, {
+      method: 'POST',
+      body: JSON.stringify({ walletAddress, ...gameData }),
+    });
+  }
+
+  async triggerGameEvent(walletAddress: string, eventType: string, eventData: unknown): Promise<ApiResponse<{ processed: boolean }>> {
+    return this.request(`/game/event`, {
+      method: 'POST',
+      body: JSON.stringify({ walletAddress, eventType, eventData }),
+    });
+  }
+
+  // Platform Statistics
+  async getPlatformStats(): Promise<ApiResponse<{
+    activeUsers: number;
+    totalItems: number;
+    completedTrades: number;
+    lastUpdated: string;
+  }>> {
+    return this.request(`/stats/platform`, { method: 'GET' });
+  }
+
+  // Token Information
+  async getTokenInfo(): Promise<ApiResponse<{
+    symbol: string;
+    name: string;
+    price: number;
+    totalSupply: number;
+    circulatingSupply: number;
+    lastUpdated: string;
+  }>> {
+    return this.request(`/token/info`, { method: 'GET' });
+  }
+}
+
+export const api = new ApiService();
