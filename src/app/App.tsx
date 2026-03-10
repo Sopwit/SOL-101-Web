@@ -20,8 +20,10 @@ if (typeof window !== 'undefined') {
 import '@solana/wallet-adapter-react-ui/styles.css';
 
 export default function App() {
-  // Solana RPC endpoint - Devnet için
-  const endpoint = useMemo(() => clusterApiUrl('devnet'), []);
+  // Solana RPC endpoint - Environment variable veya devnet fallback
+  const endpoint = useMemo(() => {
+    return import.meta.env.VITE_SOLANA_RPC_URL || clusterApiUrl('devnet');
+  }, []);
 
   // Configure wallets
   const wallets = useMemo(

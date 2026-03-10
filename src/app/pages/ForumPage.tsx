@@ -43,6 +43,7 @@ export function ForumPage() {
   const [postContent, setPostContent] = useState('');
   const [selectedPost, setSelectedPost] = useState<ForumPost | null>(null);
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
 
   const createWalletAuth = async (action: string): Promise<WalletAuthHeaders | null> => {
     if (!publicKey || !signMessage) {
@@ -75,16 +76,16 @@ export function ForumPage() {
     }
   };
 
-  useEffect(() => {
-    const loadPosts = async () => {
-      const response = await api.getPosts({ sort: 'newest' });
-      if (response.success && response.data) {
-        setPosts(response.data);
-      }
-    };
+  const loadPosts = async () => {
+    const response = await api.getPosts({ sort: filter });
+    if (response.success && response.data) {
+      setPosts(response.data);
+    }
+  };
 
+  useEffect(() => {
     loadPosts();
-  }, []);
+  }, [filter]);
 
   const tags = ['#duan-game', '#item-showcase', '#progress', '#achievement', '#tips', '#trade-request', '#guide', '#question'];
 
@@ -95,51 +96,48 @@ export function ForumPage() {
   };
 
   const handleLike = async (postId: string) => {
-    if (!connected) {
-      toast.error(t('error.walletRequired'));
-      return;
-    }
-
-    if (!publicKey) {
+    if (!connected || !publicKey) {
       toast.error(t('error.walletRequired'));
       return;
     }
 
     const walletAuth = await createWalletAuth('forum:like_post');
-    if (!walletAuth) {
-      return;
+    if (!walletAuth) return;
+
+    try {
+      const response = await api.likePost(postId, publicKey.toBase58(), walletAuth);
+      if (response.success && response.data) {
+        const liked = response.data.liked;
+        
+        setPosts((prev) =>
+          prev.map((post) =>
+            post.id === postId
+              ? {
+                ...post,
+                isLiked: liked,
+                likeCount: liked ? post.likeCount + 1 : Math.max(0, post.likeCount - 1),
+              }
+              : post
+          )
+        );
+
+        if (selectedPost && selectedPost.id === postId) {
+          setSelectedPost({
+            ...selectedPost,
+            isLiked: liked,
+            likeCount: liked ? selectedPost.likeCount + 1 : Math.max(0, selectedPost.likeCount - 1),
+          });
+        }
+      } else {
+        toast.error(response.error || t('common.error'));
+      }
+    } catch (error) {
+      toast.error(t('common.error'));
     }
-
-    const response = await api.likePost(postId, publicKey.toBase58(), walletAuth);
-    if (!response.success || !response.data) {
-      toast.error(response.error || t('common.error'));
-      return;
-    }
-
-    setPosts((prev) =>
-      prev.map((post) =>
-        post.id === postId
-          ? {
-            ...post,
-            isLiked: response.data?.liked,
-            likeCount: response.data?.liked ? post.likeCount + 1 : Math.max(0, post.likeCount - 1),
-          }
-          : post
-      )
-    );
-
-    setSelectedPost((prev) => {
-      if (!prev || prev.id !== postId) return prev;
-      return {
-        ...prev,
-        isLiked: response.data?.liked,
-        likeCount: response.data?.liked ? prev.likeCount + 1 : Math.max(0, prev.likeCount - 1),
-      };
-    });
   };
 
   const handleCreatePost = async () => {
-    if (!connected) {
+    if (!connected || !publicKey) {
       toast.error(t('error.walletRequired'));
       return;
     }
@@ -148,37 +146,40 @@ export function ForumPage() {
       return;
     }
 
-    if (!publicKey) {
-      toast.error(t('error.walletRequired'));
-      return;
-    }
-
+    setIsCreating(true);
     const walletAddress = publicKey.toBase58();
     const walletAuth = await createWalletAuth('forum:create_post');
+    
     if (!walletAuth) {
+      setIsCreating(false);
       return;
     }
 
-    const response = await api.createPost(
-      walletAddress,
-      {
-        title: postTitle.trim(),
-        content: postContent.trim(),
-        tags: selectedTags,
-      },
-      walletAuth,
-    );
+    try {
+      const response = await api.createPost(
+        walletAddress,
+        {
+          title: postTitle.trim(),
+          content: postContent.trim(),
+          tags: selectedTags,
+        },
+        walletAuth,
+      );
 
-    if (!response.success || !response.data) {
-      toast.error(response.error || t('common.error'));
-      return;
+      if (response.success && response.data) {
+        setPosts((prev) => [response.data as ForumPost, ...prev]);
+        toast.success(t('common.success') + '!');
+        setPostTitle('');
+        setPostContent('');
+        setSelectedTags([]);
+      } else {
+        toast.error(response.error || t('common.error'));
+      }
+    } catch (error) {
+      toast.error(t('common.error'));
+    } finally {
+      setIsCreating(false);
     }
-
-    setPosts((prev) => [response.data as ForumPost, ...prev]);
-    toast.success(t('common.success') + '!');
-    setPostTitle('');
-    setPostContent('');
-    setSelectedTags([]);
   };
 
   const handlePostClick = (post: ForumPost) => {
@@ -192,17 +193,22 @@ export function ForumPage() {
       if (selectedTag !== 'all' && !post.tags.includes(selectedTag)) return false;
 
       // Search filter
-      if (searchQuery && !post.title.toLowerCase().includes(searchQuery.toLowerCase()) &&
-        !post.content.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+      const matchesSearch = !searchQuery || 
+        post.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        post.content.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      if (!matchesSearch) return false;
 
       // Time filter
-      const postDate = new Date(post.createdAt);
-      const now = new Date();
-      const daysDiff = (now.getTime() - postDate.getTime()) / (1000 * 60 * 60 * 24);
+      if (timeFilter !== 'all') {
+        const postDate = new Date(post.createdAt);
+        const now = new Date();
+        const hoursDiff = (now.getTime() - postDate.getTime()) / (1000 * 60 * 60);
 
-      if (timeFilter === 'today' && daysDiff > 1) return false;
-      if (timeFilter === 'week' && daysDiff > 7) return false;
-      if (timeFilter === 'month' && daysDiff > 30) return false;
+        if (timeFilter === 'today' && hoursDiff > 24) return false;
+        if (timeFilter === 'week' && hoursDiff > 24 * 7) return false;
+        if (timeFilter === 'month' && hoursDiff > 24 * 30) return false;
+      }
 
       return true;
     })
@@ -212,7 +218,6 @@ export function ForumPage() {
       } else if (filter === 'popular') {
         return b.likeCount - a.likeCount;
       } else {
-        // Trending: likes per day
         const aScore = a.likeCount / Math.max(1, (Date.now() - new Date(a.createdAt).getTime()) / (1000 * 60 * 60 * 24));
         const bScore = b.likeCount / Math.max(1, (Date.now() - new Date(b.createdAt).getTime()) / (1000 * 60 * 60 * 24));
         return bScore - aScore;
@@ -310,8 +315,8 @@ export function ForumPage() {
                 </div>
               </div>
 
-              <Button className="w-full" size="lg" onClick={handleCreatePost}>
-                {t('forum.createPost')}
+              <Button className="w-full" size="lg" onClick={handleCreatePost} disabled={isCreating}>
+                {isCreating ? t('common.loading') : t('forum.createPost')}
               </Button>
             </div>
           </DialogContent>
@@ -457,7 +462,7 @@ export function ForumPage() {
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{selectedPost?.title}</DialogTitle>
-            <DialogDescription>
+            <DialogDescription asChild>
               {selectedPost && (
                 <div className="flex items-center gap-2 mt-2">
                   <div className="w-6 h-6 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-white text-xs font-bold">
