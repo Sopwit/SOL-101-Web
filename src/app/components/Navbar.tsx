@@ -25,9 +25,6 @@ export function Navbar() {
             <div className="w-10 h-10 bg-gradient-to-br from-primary to-secondary rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
               <Sparkles className="w-6 h-6 text-white" />
             </div>
-            <span className="text-2xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-              SOL101
-            </span>
           </Link>
 
           <div className="hidden md:flex items-center gap-6">

@@ -1,88 +1,161 @@
-# SOL101 Oyun Entegrasyon Kılavuzu
+# DUAN Unity Entegrasyon Kilavuzu
 
-Bu döküman, SOL101 platformunu oyununuzla entegre etmek için gerekli tüm bilgileri içerir.
+Bu dokuman, DUAN Unity istemcisinin DUAN web/backend katmani ile nasil konusacagini guncel kod tabanina gore aciklar. Hedef; Unity ve web uygulamasinin ayni oyuncu durumunu tutarli, hizli ve mumkun oldugunca es zamanli sekilde paylasmasidir.
 
-## API Endpoint
+## Entegrasyon Hedefi
 
+Unity entegrasyonu bu proje icin opsiyonel degil, cekirdek urun davranisidir.
+
+Beklenen sonuc:
+
+- Unity tarafinda olusan oyun ilerlemesi web tarafina yansir
+- Web uzerindeki profil, envanter ve trade verileri oyuncu durumuyla uyumlu kalir
+- Event temelli veri akisi dusuk gecikmeyle backend'e ulasir
+- Veri semalari iki istemci arasinda normalize edilir
+
+## Iki Uygulama, Tek Oyuncu Modeli
+
+Bu entegrasyonda roller nettir:
+
+- Unity projesi oyuncunun oyunu oynadigi istemcidir
+- Web projesi oyuncunun inventory, profil, forum ve market yuzudur
+- Her iki istemci ayni backend veri kontratini kullanir
+
+Oyuncu akis ornekleri:
+
+1. Oyuncu Unity'de sandik acar
+2. Loot sonucu backend'e event ve sync olarak yazilir
+3. Web uygulamasi ayni oyuncunun envanterinde yeni item'i gosterir
+
+1. Oyuncu Unity'de achievement acar
+2. Achievement backend uzerinden profile/stats alanina islenir
+3. Web tarafindaki profil sayfasi bunu gorur
+
+1. Oyuncu web'de profil veya sosyal alanlari kullanir
+2. Unity ayni oyuncu kimligi ile giris yaptiginda bu verilerin ilgili kismini okuyabilir
+
+## Veri Sahipligi
+
+Tutarlilik icin veri sahipligi soyle ele alinmalidir:
+
+- Unity uretir:
+  - gameplay event'leri
+  - loot kazanimi
+  - level progression
+  - moment-to-moment player state
+- Web/backend saklar ve dagitir:
+  - inventory kayitlari
+  - profile verisi
+  - forum icerigi
+  - market/trade verisi
+  - ortak oyuncu istatistik gorunumu
+
+Bu sayede oyuncu verisi tek merkezde tutulur; Unity ve web sadece farkli yuzler olur.
+
+## Mevcut Teknik Durum
+
+Bugunku kod tabaninda:
+
+- HTTP tabanli `game/sync` ve `game/event` endpoint'leri vardir
+- Profil, stats ve inventory okuma endpoint'leri vardir
+- Temel Unity/C# ornegi vardir
+
+Heniz tamamlanmayan kisimlar:
+
+- Gercek zamanli push/subscription katmani
+- Idempotent event tekrar kontrolu
+- Unity ve web arasinda tum inventory formatlarinin tek semada birlestirilmesi
+- Trade/shop akislarinin Unity tarafindan birebir tuketilecegi son veri kontratlari
+
+## Base URL
+
+```text
+https://<SUPABASE_PROJECT_ID>.supabase.co/functions/v1/make-server-5d6242bb
 ```
-https://[PROJECT_ID].supabase.co/functions/v1/make-server-5d6242bb
+
+Frontend tarafinda bu deger `VITE_SUPABASE_PROJECT_ID` ile olusturulur.
+
+## Gerekli Header'lar
+
+Tum isteklerde:
+
+```http
+Authorization: Bearer <SUPABASE_ANON_KEY>
+Content-Type: application/json
 ```
 
-## Authentication
+Not:
+- `game/sync` ve `game/event` endpoint'leri mevcut kodda wallet signature zorunlu kilmaz.
+- Profil, forum, shop ve market tarafindaki bazi yazma endpoint'leri ayrica wallet-signature ister.
 
-Tüm isteklerde aşağıdaki header'ı ekleyin:
+## Kullanilabilir Endpoint'ler
 
-```javascript
-{
-  "Authorization": "Bearer [PUBLIC_ANON_KEY]",
-  "Content-Type": "application/json"
-}
-```
+### 1. Oyun verisini senkronize et
 
-## 1. Oyun Verilerini Senkronize Etme
-
-Oyuncunun oyundaki ilerlemesini platforma senkronize etmek için:
-
-### Endpoint
 `POST /game/sync`
 
-### Request Body
+Oyuncunun oyun ici ilerlemesini DUAN stats yapisina yazar.
+
+#### Request body
+
 ```json
 {
-  "walletAddress": "kullanıcı_wallet_adresi",
+  "walletAddress": "wallet_public_key",
   "level": 5,
   "xp": 350,
-  "achievements": ["first_win", "speedrunner", "collector"],
-  "itemsEarned": ["item_123", "item_456"]
+  "achievements": ["first_win", "speedrunner"],
+  "itemsEarned": ["starter-sword", "crystal-key"]
 }
 ```
 
-### Response
+#### Ne yapar
+
+- `stats:<walletAddress>` kaydini olusturur veya gunceller
+- `level` ve `xp` alanlarini yazar
+- `xpToNextLevel` alanini `level * 100` formulu ile hesaplar
+- Yeni achievement id'lerini achievement listesine ekler
+- `itemsEarned` icindeki kayitlari envantere `source: "game_reward"` ile ekler
+
+#### Response
+
 ```json
 {
   "synced": true
 }
 ```
 
-### Kullanım Örneği (JavaScript)
-```javascript
-async function syncGameData(walletAddress, gameData) {
-  const response = await fetch(`${API_BASE_URL}/game/sync`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${PUBLIC_ANON_KEY}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      walletAddress,
-      ...gameData
-    })
-  });
-  
-  const result = await response.json();
-  return result.synced;
-}
+#### Ornek
 
-// Örnek kullanım
-await syncGameData("5eykt...abc", {
-  level: 10,
-  xp: 750,
-  achievements: ["level_10", "boss_defeated"],
-  itemsEarned: ["legendary_sword"]
+```ts
+const response = await fetch(`${API_BASE_URL}/game/sync`, {
+  method: 'POST',
+  headers: {
+    Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    walletAddress,
+    level: 8,
+    xp: 720,
+    achievements: ['boss_1_clear', 'speedrun_rank_c'],
+    itemsEarned: ['duan-reward-box'],
+  }),
 });
+
+const result = await response.json();
 ```
 
-## 2. Oyun Eventlerini Tetikleme
+### 2. Oyun eventi gonder
 
-Oyunda önemli olaylar gerçekleştiğinde platform üzerinde event kaydetmek için:
-
-### Endpoint
 `POST /game/event`
 
-### Request Body
+Platform tarafinda event log tutmak veya sonraki isleme akislari icin ham olay yazmak icin kullanilir.
+
+#### Request body
+
 ```json
 {
-  "walletAddress": "kullanıcı_wallet_adresi",
+  "walletAddress": "wallet_public_key",
   "eventType": "boss_defeated",
   "eventData": {
     "bossName": "Dragon King",
@@ -93,304 +166,232 @@ Oyunda önemli olaylar gerçekleştiğinde platform üzerinde event kaydetmek i�
 }
 ```
 
-### Event Types
-- `level_up` - Oyuncu seviye atladı
-- `achievement_unlocked` - Başarı kazanıldı
-- `item_earned` - Item kazanıldı
-- `boss_defeated` - Boss yenildi
-- `quest_completed` - Görev tamamlandı
-- `milestone_reached` - Milestone'a ulaşıldı
+#### Response
 
-### Kullanım Örneği (Unity C#)
-```csharp
-public async Task TriggerGameEvent(string walletAddress, string eventType, object eventData)
+```json
 {
-    var requestData = new {
-        walletAddress = walletAddress,
-        eventType = eventType,
-        eventData = eventData
-    };
-    
-    var json = JsonUtility.ToJson(requestData);
-    
-    using (UnityWebRequest www = UnityWebRequest.Post(API_BASE_URL + "/game/event", json))
-    {
-        www.SetRequestHeader("Authorization", "Bearer " + PUBLIC_ANON_KEY);
-        www.SetRequestHeader("Content-Type", "application/json");
-        
-        await www.SendWebRequest();
-        
-        if (www.result == UnityWebRequest.Result.Success)
-        {
-            Debug.Log("Event triggered successfully");
-        }
-    }
+  "processed": true
 }
 ```
 
-## 3. Platform Verilerine Erişim
+#### Onerilen event type ornekleri
 
-### Profil Bilgilerini Alma
+- `level_up`
+- `achievement_unlocked`
+- `item_earned`
+- `boss_defeated`
+- `quest_completed`
+- `milestone_reached`
 
-```javascript
-async function getPlayerProfile(walletAddress) {
-  const response = await fetch(`${API_BASE_URL}/profile/${walletAddress}`, {
-    headers: {
-      'Authorization': `Bearer ${PUBLIC_ANON_KEY}`
-    }
-  });
-  
-  return await response.json();
+Sunucu su anda event'i kaydeder ve loglar; event tipine gore ek is mantigi henuz minimal seviyededir.
+
+### 3. Profil oku
+
+`GET /profile/:walletAddress`
+
+Profil kaydi yoksa backend varsayilan bir profil olusturur:
+
+```json
+{
+  "walletAddress": "wallet_public_key",
+  "username": "Player_abcd",
+  "bio": "",
+  "createdAt": "2026-03-23T10:00:00.000Z"
 }
 ```
 
-### Oyuncu İstatistiklerini Alma
+### 4. Profil istatistiklerini oku
 
-```javascript
-async function getPlayerStats(walletAddress) {
-  const response = await fetch(`${API_BASE_URL}/profile/${walletAddress}/stats`, {
-    headers: {
-      'Authorization': `Bearer ${PUBLIC_ANON_KEY}`
-    }
-  });
-  
-  return await response.json();
+`GET /profile/:walletAddress/stats`
+
+Response yapisi:
+
+```json
+{
+  "level": 1,
+  "xp": 0,
+  "xpToNextLevel": 100,
+  "totalPosts": 0,
+  "totalItems": 0,
+  "totalTrades": 0,
+  "achievements": []
 }
 ```
 
-### Envanter Bilgilerini Alma
+### 5. Envanteri oku
 
-```javascript
-async function getPlayerInventory(walletAddress) {
-  const response = await fetch(`${API_BASE_URL}/inventory/${walletAddress}`, {
-    headers: {
-      'Authorization': `Bearer ${PUBLIC_ANON_KEY}`
-    }
-  });
-  
-  return await response.json();
+`GET /inventory/:walletAddress`
+
+Oyun tarafi, kullanicinin platform ve oyun kaynakli odullerini tek listede gorebilir.
+
+### 6. Kullaniciyi odullendir
+
+Envantere basit bir kayit dusmek icin:
+
+`POST /inventory/:walletAddress`
+
+#### Request body
+
+```json
+{
+  "itemId": "reward_chest_01"
 }
 ```
 
-## 4. Ödül Sistemi Entegrasyonu
+Not:
+- Bu endpoint sunucu tarafinda su an signature dogrulamasi yapmiyor.
+- Oyun ici odul dagitimi icin `game/sync` icindeki `itemsEarned` alani daha tutarli bir yol olabilir.
+- `POST /inventory/:walletAddress` sonucu eklenen kayit sadece `itemId` tasir; `shop/purchase` gibi zengin `item` objesi donmez.
 
-Oyuncuya platf üzerinden ödül vermek için:
+## JavaScript Entegrasyon Ornegi
 
-```javascript
-async function rewardPlayer(walletAddress, itemId) {
-  const response = await fetch(`${API_BASE_URL}/inventory/${walletAddress}`, {
+```ts
+const API_BASE_URL = `https://${projectId}.supabase.co/functions/v1/make-server-5d6242bb`;
+
+async function syncGameData(walletAddress, gameData) {
+  const response = await fetch(`${API_BASE_URL}/game/sync`, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${PUBLIC_ANON_KEY}`,
-      'Content-Type': 'application/json'
+      Authorization: `Bearer ${anonKey}`,
+      'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ itemId })
+    body: JSON.stringify({
+      walletAddress,
+      ...gameData,
+    }),
   });
-  
-  return await response.json();
+
+  if (!response.ok) {
+    throw new Error(`Sync failed: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+async function triggerGameEvent(walletAddress, eventType, eventData) {
+  const response = await fetch(`${API_BASE_URL}/game/event`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${anonKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      walletAddress,
+      eventType,
+      eventData,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Event failed: ${response.status}`);
+  }
+
+  return response.json();
 }
 ```
 
-## 5. Gerçek Zamanlı Senkronizasyon
+## Unity / C# Ornegi
 
-Oyun oturumu boyunca düzenli olarak senkronize etmek için:
+```csharp
+using System.Text;
+using UnityEngine;
+using UnityEngine.Networking;
 
-```javascript
-class GamePlatformSync {
-  constructor(walletAddress) {
-    this.walletAddress = walletAddress;
-    this.syncInterval = 60000; // 1 dakika
-    this.pendingEvents = [];
-  }
-  
-  start() {
-    this.intervalId = setInterval(() => {
-      this.sync();
-    }, this.syncInterval);
-  }
-  
-  stop() {
-    if (this.intervalId) {
-      clearInterval(this.intervalId);
-    }
-  }
-  
-  async sync() {
-    // Oyun verilerini topla
-    const gameData = {
-      level: this.getCurrentLevel(),
-      xp: this.getCurrentXP(),
-      achievements: this.getNewAchievements(),
-      itemsEarned: this.getNewItems()
-    };
-    
-    // Platform ile senkronize et
-    await syncGameData(this.walletAddress, gameData);
-    
-    // Bekleyen eventleri gönder
-    for (const event of this.pendingEvents) {
-      await this.triggerEvent(event.type, event.data);
-    }
-    this.pendingEvents = [];
-  }
-  
-  async triggerEvent(eventType, eventData) {
-    const response = await fetch(`${API_BASE_URL}/game/event`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${PUBLIC_ANON_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        walletAddress: this.walletAddress,
-        eventType,
-        eventData
-      })
+public async System.Threading.Tasks.Task<bool> TriggerGameEvent(
+    string apiBaseUrl,
+    string anonKey,
+    string walletAddress,
+    string eventType,
+    string eventDataJson)
+{
+    var payload = JsonUtility.ToJson(new EventRequest
+    {
+        walletAddress = walletAddress,
+        eventType = eventType,
+        eventData = eventDataJson
     });
-    
-    return await response.json();
-  }
-  
-  getCurrentLevel() { /* Oyun kodunuzdan seviye alın */ }
-  getCurrentXP() { /* Oyun kodunuzdan XP alın */ }
-  getNewAchievements() { /* Yeni başarıları alın */ }
-  getNewItems() { /* Yeni itemleri alın */ }
-}
 
-// Kullanım
-const platformSync = new GamePlatformSync(playerWalletAddress);
-platformSync.start();
+    using var request = new UnityWebRequest($"{apiBaseUrl}/game/event", "POST");
+    var bodyRaw = Encoding.UTF8.GetBytes(payload);
+    request.uploadHandler = new UploadHandlerRaw(bodyRaw);
+    request.downloadHandler = new DownloadHandlerBuffer();
+    request.SetRequestHeader("Authorization", $"Bearer {anonKey}");
+    request.SetRequestHeader("Content-Type", "application/json");
 
-// Oyun bittiğinde
-platformSync.stop();
-```
-
-## 6. Başarı Sistemi
-
-### Başarı Tanımlama Örneği
-
-```javascript
-const ACHIEVEMENTS = {
-  FIRST_BLOOD: {
-    id: 'first_blood',
-    name: 'First Blood',
-    description: 'İlk düşmanı yendin',
-    icon: '⚔️'
-  },
-  LEVEL_10: {
-    id: 'level_10',
-    name: 'Deneyimli Savaşçı',
-    description: '10. seviyeye ulaştın',
-    icon: '🏆'
-  },
-  COLLECTOR: {
-    id: 'collector',
-    name: 'Koleksiyoncu',
-    description: '50 farklı item topladın',
-    icon: '📦'
-  },
-  SPEEDRUNNER: {
-    id: 'speedrunner',
-    name: 'Hız Canavarı',
-    description: 'Bir seviyeyi 5 dakikadan kısa sürede tamamladın',
-    icon: '⚡'
-  }
-};
-
-// Başarı kazanıldığında
-async function unlockAchievement(walletAddress, achievementId) {
-  await syncGameData(walletAddress, {
-    achievements: [achievementId]
-  });
-  
-  await triggerGameEvent(walletAddress, 'achievement_unlocked', {
-    achievementId,
-    achievementName: ACHIEVEMENTS[achievementId].name,
-    timestamp: new Date().toISOString()
-  });
-}
-```
-
-## 7. Hata Yönetimi
-
-```javascript
-async function safeSyncGameData(walletAddress, gameData) {
-  try {
-    const response = await fetch(`${API_BASE_URL}/game/sync`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${PUBLIC_ANON_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        walletAddress,
-        ...gameData
-      })
-    });
-    
-    if (!response.ok) {
-      const error = await response.json();
-      console.error('Sync failed:', error);
-      
-      // Offline mode'a geç veya yerel olarak kaydet
-      localStorage.setItem('pending_sync', JSON.stringify({
-        walletAddress,
-        gameData,
-        timestamp: Date.now()
-      }));
-      
-      return false;
+    var operation = request.SendWebRequest();
+    while (!operation.isDone)
+    {
+        await System.Threading.Tasks.Task.Yield();
     }
-    
-    return true;
-  } catch (error) {
-    console.error('Network error:', error);
-    return false;
-  }
+
+    return request.result == UnityWebRequest.Result.Success;
 }
 ```
 
-## 8. Test Etme
+## Senkronizasyon Stratejisi
 
-### Test Wallet Adresi
-Geliştirme sırasında test için:
-```
-Test Wallet: 5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d
-```
+Onerilen model:
 
-### Test Event Gönderme
+1. Oyuncu oturum actiginda profil ve stats cekin.
+2. Oyun ici belirgin milestone'larda `game/event` cagin.
+3. Kritik oyun durumlarinda kucuk event paketleriyle ilerleyin; buyuk state'i gereksiz yere tekrar gondermeyin.
+4. Checkpoint, bolum sonu veya oturum kapanisinda `game/sync` ile toplu guncelleme yapin.
+5. Web tarafinda ayni oyuncu verisini goruntuleyen ekranlar polling veya ileride eklenecek realtime katman ile yenilenmelidir.
+4. UI tarafinda envanter gosterecekseniz `inventory/:walletAddress` verisini ayrica cekin.
 
-```javascript
-// Test eventi
-await fetch(`${API_BASE_URL}/game/event`, {
-  method: 'POST',
-  headers: {
-    'Authorization': `Bearer ${PUBLIC_ANON_KEY}`,
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify({
-    walletAddress: "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d",
-    eventType: "test_event",
-    eventData: {
-      message: "Test edildi",
-      timestamp: new Date().toISOString()
+## Performans ve Tutarlilik Notlari
+
+Unity ile tam optimize ve es zamanliya yakin bir deneyim icin su kurallar izlenmelidir:
+
+- Her event benzersiz bir istemci event id ile gonderilmelidir
+- Ayni event tekrar gonderilse bile backend duplicate islem yapmamalidir
+- Buyuk obje yerine degisen alanlar gonderilmelidir
+- Inventory, achievement ve stats semalari Unity ve web tarafinda ortak tip mantigi ile tanimlanmalidir
+- Kritik ekranlar stale veri gostermemeli; okunma sikligi ve cache suresi kontrollu olmali
+- Auth modeli web ve Unity arasinda tek standarda inmeli
+
+## Ornek Akis
+
+Boss kesildi:
+
+1. `POST /game/event` ile `boss_defeated`
+2. Gerekliyse local state uzerinde odul hesaplama
+3. `POST /game/sync` ile yeni XP, level, achievement ve item listesi
+
+## Hata Yonetimi
+
+Onerilen kontroller:
+
+- `response.ok` kontrolu yapin
+- 401/403 icin anon key veya imza gerektiren endpoint kullanimini dogrulayin
+- 500 durumunda retry/backoff uygulayin
+- Ayni achievement veya item odulunun tekrar gonderilebilme riskini istemci tarafinda da yonetin
+
+Ornek basit retry:
+
+```ts
+async function withRetry(requestFn, retries = 3) {
+  let lastError;
+
+  for (let i = 0; i < retries; i += 1) {
+    try {
+      return await requestFn();
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, 500 * (i + 1)));
     }
-  })
-});
+  }
+
+  throw lastError;
+}
 ```
 
-## 9. Best Practices
+## Bilinen Sinirlar
 
-1. **Batch İşlemler**: Birden fazla küçük güncelleme yerine, belirli aralıklarla toplu senkronizasyon yapın
-2. **Offline Support**: Ağ bağlantısı olmadığında verileri yerel olarak kaydedin
-3. **Rate Limiting**: API'yi çok sık çağırmayın (dakikada 60 istek limiti)
-4. **Hata Yönetimi**: Her API çağrısında try-catch kullanın
-5. **Validasyon**: Verileri göndermeden önce doğrulayın
-6. **Logging**: Önemli olayları logglayın
+- `game/event` verisi su an log/record merkezlidir; event bazli odul motoru yoktur.
+- `game/sync` item kayitlari sadece `itemId` saklayabilir; shop satin alimlarindaki kadar zengin item metadata'si olmayabilir.
+- Inventory formatlari farkli kaynaklara gore degisebilir:
+  - `shop/purchase` sonucu `item` objesi icerir
+  - `game/sync` ve `inventory/:walletAddress` bazi kayitlarda sadece `itemId` tasiyabilir
 
-## Destek
-
-Sorun yaşarsanız:
-- GitHub Issues: [proje linki]
-- Discord: [discord linki]
-- E-posta: support@sol101.com
+Bu fark uygulama veya oyun istemcisinde normalize edilmelidir.

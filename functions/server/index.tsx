@@ -7,7 +7,7 @@ import * as kv from "./kv_store.tsx";
 const app = new Hono();
 
 type AuthClaims = {
-  domain: "SOL101";
+  domain: "DUAN";
   action: string;
   walletAddress: string;
   timestamp: number;
@@ -28,7 +28,7 @@ function parseAuthClaims(rawMessage: string): AuthClaims | null {
   try {
     const parsed = JSON.parse(rawMessage);
     if (
-      parsed?.domain !== "SOL101" ||
+      parsed?.domain !== "DUAN" ||
       typeof parsed?.action !== "string" ||
       typeof parsed?.walletAddress !== "string" ||
       typeof parsed?.timestamp !== "number"
@@ -96,7 +96,13 @@ app.use(
   "/*",
   cors({
     origin: "*",
-    allowHeaders: ["Content-Type", "Authorization"],
+    allowHeaders: [
+      "Content-Type",
+      "Authorization",
+      "x-wallet-address",
+      "x-wallet-message",
+      "x-wallet-signature",
+    ],
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     exposeHeaders: ["Content-Length"],
     maxAge: 600,
@@ -189,7 +195,37 @@ initializeShopItems();
 
 // Health check endpoint
 app.get("/make-server-5d6242bb/health", (c) => {
-  return c.json({ status: "ok" });
+  return kv.ping()
+    .then(() => c.json({
+      status: "ok",
+      service: "DUAN Edge Functions",
+      env: {
+        supabaseUrl: Boolean(Deno.env.get("SUPABASE_URL")),
+        supabaseServiceRoleKey: Boolean(Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")),
+      },
+      database: {
+        connected: true,
+        table: "kv_store_5d6242bb",
+      },
+      timestamp: new Date().toISOString(),
+    }))
+    .catch((error) => {
+      console.error("Health check database error:", error);
+      return c.json({
+        status: "error",
+        service: "DUAN Edge Functions",
+        env: {
+          supabaseUrl: Boolean(Deno.env.get("SUPABASE_URL")),
+          supabaseServiceRoleKey: Boolean(Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")),
+        },
+        database: {
+          connected: false,
+          table: "kv_store_5d6242bb",
+          error: error instanceof Error ? error.message : "Unknown database error",
+        },
+        timestamp: new Date().toISOString(),
+      }, 500);
+    });
 });
 
 // ========== PLATFORM STATS ==========
@@ -581,9 +617,30 @@ app.post("/make-server-5d6242bb/market/listings", async (c) => {
       return c.json({ error: auth.error }, auth.status);
     }
 
+    if (!data.offeredItemId) {
+      return c.json({ error: "offeredItemId is required" }, 400);
+    }
+
+    const offeredInventoryItem = await kv.get(`inventory:${data.sellerWallet}:${data.offeredItemId}`);
+    if (!offeredInventoryItem) {
+      return c.json({ error: "Offered inventory item not found" }, 404);
+    }
+
+    const offeredItem = offeredInventoryItem.item || {
+      id: offeredInventoryItem.itemId,
+      name: offeredInventoryItem.itemId,
+      description: "",
+      imageUrl: "",
+      price: 0,
+      rarity: "common",
+      stock: 1,
+      category: "Inventory",
+    };
+
     const listing = {
       id: `listing_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
       ...data,
+      offeredItem,
       status: "active",
       createdAt: new Date().toISOString(),
       expiresAt: new Date(Date.now() + data.duration * 60 * 60 * 1000).toISOString(),
@@ -606,6 +663,11 @@ app.post("/make-server-5d6242bb/market/listings/:listingId/trade", async (c) => 
     const auth = await verifyWalletAuth(c, "market:create_trade", data.buyerWallet);
     if (!auth.ok) {
       return c.json({ error: auth.error }, auth.status);
+    }
+
+    const listing = await kv.get(`listing:${listingId}`);
+    if (!listing) {
+      return c.json({ error: "Listing not found" }, 404);
     }
 
     const trade = {

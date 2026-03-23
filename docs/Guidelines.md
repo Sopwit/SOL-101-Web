@@ -1,61 +1,77 @@
-**Add your own guidelines here**
-<!--
+# DUAN Gelistirme Rehberi
 
-System Guidelines
+Bu dosya, repo uzerinde calisan ekip uyeleri icin teknik ve dokumantasyon odakli ortak kurallari toplar. Amac; kod, arayuz ve belgeler arasindaki anlamsal kopuklugu azaltmaktir.
 
-Use this file to provide the AI with rules and guidelines you want it to follow.
-This template outlines a few examples of things you can add. You can add your own sections and format it to suit your needs
+## Temel Ilkeler
 
-TIP: More context isn't always better. It can confuse the LLM. Try and add the most important rules you need
+- Belgeler koddan geri kalmamali.
+- Mock ve production benzeri akislar acik bicimde ayristirilmali.
+- Frontend'de gorunen her kritik davranisin backend karsiligi veya "heniz bagli degil" notu olmali.
+- Wallet imzasi gerektiren islemler hem kodda hem dokumanda ayni action ismini kullanmali.
+- Yeni bir ozellik tamamlandiginda ilgili `README` veya `docs/` dosyasi ayni PR icinde guncellenmeli.
+- Unity entegrasyonu birincil senaryo kabul edilmeli; veri modeli kararlarinda Unity istemcisi ilk sinif vatandas gibi ele alinmali.
+- Web ve Unity ayri urunler degil, tek oyuncu deneyiminin iki istemcisi olarak ele alinmali.
 
-# General guidelines
+## Dokumantasyon Kurallari
 
-Any general rules you want the AI to follow.
-For example:
+- `README.md` yuksek seviyeli urun durumu ve kurulum icin referans kaynaktir.
+- `docs/GAME_INTEGRATION.md` sadece guncel, gercek endpoint'leri icermelidir.
+- Bilinen eksikler dokumanlardan saklanmamalidir; "tamamlanmadi", "mock", "UI-only" gibi ibareler net kullanilmalidir.
+- Endpoint, environment variable, route veya auth yapisi degistiginde ayni degisiklik ilgili dokumanda da yapilmalidir.
+- Kod ile dokuman uyusmuyorsa kaynak gercek kabul edilir ve dokuman hemen duzeltilir.
 
-* Only use absolute positioning when necessary. Opt for responsive and well structured layouts that use flexbox and grid by default
-* Refactor code as you go to keep code clean
-* Keep file sizes small and put helper functions and components in their own files.
+## Frontend Kurallari
 
---------------
+- Dil destegi olan yeni metinler `LanguageContext` icine eklenmelidir.
+- Wallet gerektiren aksiyonlar kullaniciya acik hata mesaji dondurmelidir.
+- Demo verisi kullanilan ekranlarda fallback davranisi bilincli olmali; sessizce gercek veriymis gibi davranilmamali.
+- Shop, Market ve Profil ekranlarinda mock veriden gercek API'a gecis yapilirken veri formati normalize edilmelidir.
 
-# Design system guidelines
-Rules for how the AI should make generations look like your company's design system
+## Backend Kurallari
 
-Additionally, if you select a design system to use in the prompt box, you can reference
-your design system's components, tokens, variables and components.
-For example:
+- Yazan endpoint'ler mumkun oldugunca tutarli auth davranisi gostermelidir.
+- Wallet signature isteyen endpoint'lerde action isimleri frontend ile birebir ayni olmalidir.
+- Veri semalari kaynaga gore degisiyorsa bu fark ya normalize edilmeli ya da acikca belgelenmelidir.
+- Default/fallback response'lar istemciyi bozmayacak sekilde tahmin edilebilir olmali.
+- Unity ve web icin ayri ayri degil, paylasilabilir veri kontratlari tasarlanmalidir.
+- Es zamanliya yakin deneyim icin endpoint'ler idempotency, ordering ve partial update mantigi dusunulerek tasarlanmalidir.
+- Inventory, profile, stats ve achievement gibi alanlarda backend ortak source of truth olmalidir.
 
-* Use a base font-size of 14px
-* Date formats should always be in the format “Jun 10”
-* The bottom toolbar should only ever have a maximum of 4 items
-* Never use the floating action button with the bottom toolbar
-* Chips should always come in sets of 3 or more
-* Don't use a dropdown if there are 2 or fewer options
+## Auth ve Guvenlik
 
-You can also create sub sections and add more specific details
-For example:
+- Imzalanan mesaj semasi standart tutulmali:
+  - `domain`
+  - `action`
+  - `walletAddress`
+  - `timestamp`
+- Message action isimleri snake_case veya kebab/camel karisik olmayacak sekilde tek standarda indirilmeli.
+- `AUTH_MAX_AGE_MS` gibi sure sinirlari degisirse client akislari ve dokuman birlikte gozden gecirilmeli.
 
+## UI ve Tasarim
 
-## Button
-The Button component is a fundamental interactive element in our design system, designed to trigger actions or navigate
-users through the application. It provides visual feedback and clear affordances to enhance user experience.
+- Mevcut tema "cosmic / glass" cizgisini korumali.
+- Light/dark tema destegi bozulmamali.
+- Mobil gorunum ikinci sinif kabul edilmemeli; yeni bilesenler dar ekranlarda da test edilmelidir.
+- shadcn/ui bilesenleri kullaniliyorsa proje stil diline uyarlanmis halleri tercih edilmelidir.
 
-### Usage
-Buttons should be used for important actions that users need to take, such as form submissions, confirming choices,
-or initiating processes. They communicate interactivity and should have clear, action-oriented labels.
+## Kod Organizasyonu
 
-### Variants
-* Primary Button
-  * Purpose : Used for the main action in a section or page
-  * Visual Style : Bold, filled with the primary brand color
-  * Usage : One primary button per section to guide users toward the most important action
-* Secondary Button
-  * Purpose : Used for alternative or supporting actions
-  * Visual Style : Outlined with the primary color, transparent background
-  * Usage : Can appear alongside a primary button for less important actions
-* Tertiary Button
-  * Purpose : Used for the least important actions
-  * Visual Style : Text-only with no border, using primary color
-  * Usage : For actions that should be available but not emphasized
--->
+- Route seviyesindeki ekranlar `src/app/pages` altinda kalmali.
+- Ortak UI bilesenleri `src/app/components` icinde tutulmali.
+- API cagrilari `src/app/services/api.ts` uzerinden merkezilesmeli.
+- Gecici mock veri `src/app/lib/mockData.ts` disina tasmamalidir.
+
+## Test ve Dogrulama
+
+- Yeni endpoint eklendiginde en azindan manuel dogrulama senaryosu dokumante edilmelidir.
+- Mock -> real API gecislerinde bos veri, hatali auth ve network error senaryolari kontrol edilmelidir.
+- Diger ekip uyeleri icin "hangi kisim gercek, hangi kisim demo" sorusu dokumana bakarak cevaplanabilmelidir.
+- Unity istemcisi ve web istemcisi ayni oyuncu icin tutarli veri goruyor mu sorusu her kritik ozellikte test edilmelidir.
+
+## Her Ozellik Sonrasi Kontrol Listesi
+
+- Kod tamamlandi mi
+- Wallet/auth akisi dogrulandi mi
+- UI text'leri iki dilde eklendi mi
+- `README.md` veya ilgili `docs/` dosyasi guncellendi mi
+- Mock kullanimlari gerekiyorsa acikca not edildi mi

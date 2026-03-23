@@ -31,10 +31,10 @@ const translations: Translations = {
   'nav.profile': { tr: 'Profil', en: 'Profile' },
   
   // Home Page
-  'home.title': { tr: 'SOL101 Platform', en: 'SOL101 Platform' },
+  'home.title': { tr: 'DUAN-GAME', en: 'DUAN-GAME' },
   'home.subtitle': { tr: 'DUAN oyunu için Solana tabanlı eğitim ve ticaret platformu', en: 'Solana-based learning and trading platform for DUAN game' },
-  'home.exploreShop': { tr: 'Mağazayı Keşfet', en: 'Explore Shop' },
-  'home.joinForum': { tr: 'Foruma Katıl', en: 'Join Forum' },
+  'home.exploreShop': { tr: 'Magazayi Kesfet', en: 'Explore Shop' },
+  'home.joinForum': { tr: 'Foruma Git', en: 'Go to Forum' },
   'home.features': { tr: 'Platform Özellikleri', en: 'Platform Features' },
   'home.activeUsers': { tr: 'Aktif Kullanıcılar', en: 'Active Users' },
   'home.totalItems': { tr: 'Toplam Item', en: 'Total Items' },
@@ -48,7 +48,7 @@ const translations: Translations = {
   'feature.market.title': { tr: 'Pazar', en: 'Market' },
   'feature.market.desc': { tr: 'Diğer oyuncularla takas yap', en: 'Trade with other players' },
   'feature.profile.title': { tr: 'Profil', en: 'Profile' },
-  'feature.profile.desc': { tr: 'Envanterini görüntüle ve yönet', en: 'View and manage your inventory' },
+  'feature.profile.desc': { tr: 'Oyuncu hesabini ve envanterini yonet', en: 'Manage your player account and inventory' },
   
   // Forum
   'forum.title': { tr: 'Forum', en: 'Forum' },
@@ -125,7 +125,7 @@ const translations: Translations = {
   'profile.unlocked': { tr: 'Kazanıldı:', en: 'Unlocked:' },
   
   // Footer
-  'footer.platform': { tr: 'SOL101 Platform - DUAN Oyun Entegrasyonu', en: 'SOL101 Platform - DUAN Game Integration' },
+  'footer.platform': { tr: 'DUAN-GAME - DUAN Oyun Entegrasyonu', en: 'DUAN-GAME - DUAN Game Integration' },
   'footer.network': { tr: 'Solana Devnet', en: 'Solana Devnet' },
   'footer.madeWith': { tr: 'Solana topluluğu için ❤️ ile yapıldı', en: 'Made with ❤️ for Solana community' },
   

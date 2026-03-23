@@ -2,7 +2,10 @@ import type { User, ForumPost, ShopItem, MarketListing, InventoryItem } from '..
 
 const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
 const publicAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const API_BASE_URL = `https://${projectId}.supabase.co/functions/v1/make-server-5d6242bb`;
+const functionPath = 'make-server-5d6242bb';
+const API_BASE_URL = projectId
+  ? `https://${projectId}.supabase.co/functions/v1/${functionPath}`
+  : '';
 
 interface ApiResponse<T> {
   success: boolean;
@@ -17,11 +20,23 @@ export interface WalletAuthHeaders {
 }
 
 class ApiService {
+  private getConfigError(): string | null {
+    if (!projectId) return 'Supabase project ID eksik. VITE_SUPABASE_PROJECT_ID tanimlanmali.';
+    if (!publicAnonKey) return 'Supabase anon key eksik. VITE_SUPABASE_ANON_KEY tanimlanmali.';
+    return null;
+  }
+
   private async request<T>(
     endpoint: string,
     options: RequestInit = {},
     walletAuth?: WalletAuthHeaders
   ): Promise<ApiResponse<T>> {
+    const configError = this.getConfigError();
+    if (configError) {
+      console.error(`Supabase config error [${endpoint}]: ${configError}`);
+      return { success: false, error: configError };
+    }
+
     try {
       const url = `${API_BASE_URL}${endpoint}`;
       console.log(`API Request: ${options.method || 'GET'} ${url}`);
@@ -57,12 +72,15 @@ class ApiService {
       return { success: true, data };
     } catch (error) {
       console.error(`Network Error [${endpoint}]:`, error);
-      // Check if it's a network error or CORS issue
       if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
         console.error('Possible causes: Server offline, CORS issue, or network problem');
       }
       return { success: false, error: 'Bağlantı hatası - Server çalışmıyor olabilir' };
     }
+  }
+
+  async getHealth(): Promise<ApiResponse<{ status: string; service: string; env: Record<string, boolean> }>> {
+    return this.request(`/health`, { method: 'GET' });
   }
 
   // Profile API

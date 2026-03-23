@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { Wallet, Sparkles, Edit2, Save, Trophy, TrendingUp, Package, Repeat } from 'lucide-react';
+import { Wallet, Sparkles, Edit2, Save, Trophy, TrendingUp, Package } from 'lucide-react';
 import { GlassCard } from '../components/GlassCard';
 import { RarityBadge } from '../components/RarityBadge';
 import { Button } from '../components/ui/button';
@@ -8,12 +8,13 @@ import { Input } from '../components/ui/input';
 import { Textarea } from '../components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Progress } from '../components/ui/progress';
-import { mockInventory, mockPosts, mockMarketListings } from '../lib/mockData';
+import { createWalletAuth } from '../lib/walletAuth';
 import { useStore } from '../store';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { toast } from 'sonner';
-import { api, type WalletAuthHeaders } from '../services/api';
+import { api } from '../services/api';
 import { useLanguage } from '../contexts/LanguageContext';
+import type { InventoryItem } from '../types';
 
 interface ProfileStats {
   level: number;
@@ -39,7 +40,11 @@ export function ProfilePage() {
   const [username, setUsername] = useState(user?.username || '');
   const [bio, setBio] = useState(user?.bio || '');
   const [stats, setStats] = useState<ProfileStats | null>(null);
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(false);
+
+  const normalizeInventory = (items: InventoryItem[] | undefined): InventoryItem[] =>
+    (items || []).filter((item): item is InventoryItem => Boolean(item?.item?.id && item?.item?.name));
 
   const loadProfileData = async () => {
     if (!publicKey) return;
@@ -48,17 +53,25 @@ export function ProfilePage() {
     try {
       const walletAddress = publicKey.toBase58();
 
-      // Load profile stats
-      const statsResponse = await api.getProfileStats(walletAddress);
+      const [statsResponse, profileResponse, inventoryResponse] = await Promise.all([
+        api.getProfileStats(walletAddress),
+        api.getProfile(walletAddress),
+        api.getInventory(walletAddress),
+      ]);
+
       if (statsResponse.success && statsResponse.data) {
         setStats(statsResponse.data);
       }
 
-      // Load profile info
-      const profileResponse = await api.getProfile(walletAddress);
       if (profileResponse.success && profileResponse.data) {
         setUsername(profileResponse.data.username || '');
         setBio(profileResponse.data.bio || '');
+      }
+
+      if (inventoryResponse.success && inventoryResponse.data) {
+        setInventory(normalizeInventory(inventoryResponse.data));
+      } else {
+        setInventory([]);
       }
     } catch (error) {
       console.error('Error loading profile:', error);
@@ -73,43 +86,16 @@ export function ProfilePage() {
     }
   }, [connected, publicKey]);
 
-  const createWalletAuth = async (action: string): Promise<WalletAuthHeaders | null> => {
-    if (!publicKey || !signMessage) {
-      toast.error('Wallet imzalama desteklenmiyor');
-      return null;
-    }
-    const walletAddress = publicKey.toBase58();
-    const message = JSON.stringify({
-      domain: 'SOL101',
-      action,
-      walletAddress,
-      timestamp: Date.now(),
-    });
-    const messageBytes = new TextEncoder().encode(message);
-    try {
-      const signatureBytes = await signMessage(messageBytes);
-      const binary = Array.from(signatureBytes, (byte) => String.fromCharCode(byte)).join('');
-      const signature = btoa(binary);
-      return {
-        walletAddress,
-        message,
-        signature,
-      };
-    } catch {
-      toast.error('İmza işlemi iptal edildi veya başarısız oldu');
-      return null;
-    }
-  };
-
   const handleSave = async () => {
     if (!publicKey) return;
     const walletAddress = publicKey.toBase58();
-    const walletAuth = await createWalletAuth('profile:update');
+    const walletAuth = await createWalletAuth({ publicKey, signMessage }, 'profile:update');
     if (!walletAuth) return;
     try {
-      const response = await api.updateProfile(walletAddress, { username, bio }, walletAuth);
+        const response = await api.updateProfile(walletAddress, { username, bio }, walletAuth);
       if (response.success) {
         setIsEditing(false);
+        await loadProfileData();
         toast.success(t('common.success') + '!');
       } else {
         toast.error(response.error || t('common.error'));
@@ -137,9 +123,6 @@ export function ProfilePage() {
 
   const walletAddress = publicKey?.toBase58() || '';
   const shortAddress = `${walletAddress.slice(0, 4)}...${walletAddress.slice(-4)}`;
-  const userPosts = mockPosts.slice(0, 2);
-  const userListings = mockMarketListings.slice(0, 1);
-
   const xpProgress = stats ? (stats.xp / stats.xpToNextLevel) * 100 : 0;
 
   return (
@@ -255,11 +238,6 @@ export function ProfilePage() {
                   <div className="text-2xl font-bold">{stats.totalItems}</div>
                   <div className="text-xs text-muted-foreground">{t('profile.items')}</div>
                 </div>
-                <div className="text-center p-4 bg-gradient-to-br from-purple-500/10 to-purple-500/5 rounded-lg">
-                  <Repeat className="w-6 h-6 text-purple-500 mx-auto mb-2" />
-                  <div className="text-2xl font-bold">{stats.totalTrades}</div>
-                  <div className="text-xs text-muted-foreground">{t('profile.trades')}</div>
-                </div>
                 <div className="text-center p-4 bg-gradient-to-br from-secondary/10 to-secondary/5 rounded-lg">
                   <Trophy className="w-6 h-6 text-secondary mx-auto mb-2" />
                   <div className="text-2xl font-bold">{stats.achievements.length}</div>
@@ -273,16 +251,15 @@ export function ProfilePage() {
 
       {/* Tabs */}
       <Tabs defaultValue="inventory" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="inventory">{t('profile.inventory')} ({mockInventory.length})</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="inventory">{t('profile.inventory')} ({inventory.length})</TabsTrigger>
           <TabsTrigger value="achievements">{t('profile.achievements')} {stats && `(${stats.achievements.length})`}</TabsTrigger>
-          <TabsTrigger value="posts">{t('profile.posts')} ({userPosts.length})</TabsTrigger>
-          <TabsTrigger value="listings">{t('profile.listings')} ({userListings.length})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="inventory" className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {mockInventory.map((inv, index) => (
+          {inventory.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {inventory.map((inv, index) => (
               <motion.div
                 key={inv.id}
                 initial={{ opacity: 0, scale: 0.9 }}
@@ -306,8 +283,17 @@ export function ProfilePage() {
                   </div>
                 </GlassCard>
               </motion.div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <GlassCard className="p-12 text-center">
+              <Package className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
+              <h3 className="text-xl font-bold mb-2">{t('profile.inventory')}</h3>
+              <p className="text-muted-foreground">
+                {loading ? t('common.loading') : 'Envanterde henuz Supabase uzerinden gelen item bulunmuyor.'}
+              </p>
+            </GlassCard>
+          )}
         </TabsContent>
 
         <TabsContent value="achievements" className="space-y-4">
@@ -346,76 +332,6 @@ export function ProfilePage() {
               </p>
             </GlassCard>
           )}
-        </TabsContent>
-
-        <TabsContent value="posts" className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {userPosts.map((post, index) => (
-              <motion.div
-                key={post.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.05, duration: 0.3 }}
-              >
-                <GlassCard hover className="overflow-hidden">
-                  {post.imageUrl && (
-                    <div className="aspect-video overflow-hidden">
-                      <img
-                        src={post.imageUrl}
-                        alt={post.title}
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                  )}
-                  <div className="p-4">
-                    <h3 className="font-bold mb-2">{post.title}</h3>
-                    <p className="text-sm text-muted-foreground line-clamp-2">{post.content}</p>
-                    <div className="flex items-center gap-4 mt-3 text-sm text-muted-foreground">
-                      <span>❤️ {post.likeCount}</span>
-                      <span>💬 {post.commentCount}</span>
-                    </div>
-                  </div>
-                </GlassCard>
-              </motion.div>
-            ))}
-          </div>
-        </TabsContent>
-
-        <TabsContent value="listings" className="space-y-4">
-          <div className="grid grid-cols-1 gap-6">
-            {userListings.map((listing, index) => (
-              <motion.div
-                key={listing.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.05, duration: 0.3 }}
-              >
-                <GlassCard hover className="p-6">
-                  <div className="flex flex-col md:flex-row gap-6">
-                    <div className="w-full md:w-48 aspect-square rounded-lg overflow-hidden">
-                      <img
-                        src={listing.offeredItem.imageUrl}
-                        alt={listing.offeredItem.name}
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="font-bold text-xl mb-2">{listing.offeredItem.name}</h3>
-                      <RarityBadge rarity={listing.offeredItem.rarity} />
-                      <p className="text-sm text-muted-foreground mt-3">
-                        {t('market.wanted')}: {listing.wantedType === 'token' ? `${listing.wantedTokenAmount} Token` : listing.wantedItemName}
-                      </p>
-                      {listing.note && (
-                        <p className="text-sm text-muted-foreground mt-2 p-3 bg-muted/30 rounded-lg">
-                          {listing.note}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </GlassCard>
-              </motion.div>
-            ))}
-          </div>
         </TabsContent>
       </Tabs>
     </div>

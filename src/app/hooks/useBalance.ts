@@ -1,33 +1,56 @@
 import { useEffect } from 'react';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
+import { PublicKey } from '@solana/web3.js';
 import { useStore } from '../store';
 
 export function useBalance() {
   const { connection } = useConnection();
   const { publicKey, connected } = useWallet();
-  const { setSolBalance } = useStore();
+  const { setSolBalance, setTokenBalance } = useStore();
 
   useEffect(() => {
     if (!connected || !publicKey) {
       setSolBalance(0);
+      setTokenBalance(0);
       return;
     }
 
-    // Get SOL balance
     const getBalance = async () => {
       try {
-        const balance = await connection.getBalance(publicKey);
-        setSolBalance(balance / 1e9); // Convert lamports to SOL
+        const [solLamports, tokenBalance] = await Promise.all([
+          connection.getBalance(publicKey),
+          getSplTokenBalance(),
+        ]);
+
+        setSolBalance(solLamports / 1e9);
+        setTokenBalance(tokenBalance);
       } catch (error) {
         console.error('Error fetching balance:', error);
       }
     };
 
+    const getSplTokenBalance = async (): Promise<number> => {
+      const mintAddress = import.meta.env.VITE_SOLANA_TOKEN_MINT;
+      if (!mintAddress) return 0;
+
+      try {
+        const mint = new PublicKey(mintAddress);
+        const response = await connection.getParsedTokenAccountsByOwner(publicKey, { mint });
+
+        return response.value.reduce((total, account) => {
+          const amount = account.account.data.parsed?.info?.tokenAmount?.uiAmount;
+          return total + (typeof amount === 'number' ? amount : 0);
+        }, 0);
+      } catch (error) {
+        console.error('Error fetching SPL token balance:', error);
+        return 0;
+      }
+    };
+
     getBalance();
 
-    // Update balance every 30 seconds
     const interval = setInterval(getBalance, 30000);
 
     return () => clearInterval(interval);
-  }, [connected, publicKey, connection, setSolBalance]);
+  }, [connected, publicKey, connection, setSolBalance, setTokenBalance]);
 }

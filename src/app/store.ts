@@ -20,7 +20,7 @@ export const useStore = create<AppStore>((set) => ({
   user: null,
   setUser: (user) => set({ user }),
   solBalance: 0,
-  tokenBalance: 1000, // Mock starting balance
+  tokenBalance: 0,
   setSolBalance: (balance) => set({ solBalance: balance }),
   setTokenBalance: (balance) => set({ tokenBalance: balance }),
 }));

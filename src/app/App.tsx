@@ -20,9 +20,17 @@ if (typeof window !== 'undefined') {
 import '@solana/wallet-adapter-react-ui/styles.css';
 
 export default function App() {
-  // Solana RPC endpoint - Environment variable veya devnet fallback
+  // Solana RPC endpoint - env ile override edilebilir, yoksa cluster fallback kullanilir.
   const endpoint = useMemo(() => {
-    return import.meta.env.VITE_SOLANA_RPC_URL || clusterApiUrl('devnet');
+    const configuredEndpoint = import.meta.env.VITE_SOLANA_RPC_URL;
+    if (configuredEndpoint) return configuredEndpoint;
+
+    const configuredCluster = import.meta.env.VITE_SOLANA_CLUSTER;
+    if (configuredCluster === 'mainnet-beta' || configuredCluster === 'testnet' || configuredCluster === 'devnet') {
+      return clusterApiUrl(configuredCluster);
+    }
+
+    return clusterApiUrl('devnet');
   }, []);
 
   // Configure wallets

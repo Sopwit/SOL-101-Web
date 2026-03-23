@@ -1,104 +1,261 @@
-# SOL101 Platform 🚀
+# DUAN Web
 
-Solana Devnet üzerinde çalışan, öğrencilerin birbirleriyle etkileşime geçebildiği tam kapsamlı bir web platformu.
+DUAN-GAME etrafinda kurgulanmis bu web uygulamasi; Solana tabanli topluluk, envanter ve ticaret akislarini tek bir yerde toplar. Bu repo; React tabanli istemciyi ve Supabase Edge Functions uzerinde calisan hafif backend katmanini birlikte barindirir. Hedef mimari, Unity istemcisi ile tam entegre, dusuk gecikmeli ve veri tutarliligi yuksek bir deneyim sunmaktir.
 
-## 🎯 Özellikler
+## Proje Durumu
 
-### 🗣️ Forum
-- Başarılarınızı ve ilerlemelerinizi paylaşın
-- Ekran görüntüsü yükleme desteği
-- Beğeni ve yorum sistemi
-- Etiket bazlı filtreleme (#item-showcase, #progress, #achievement, #tips, #trade-request)
-- En yeni / En çok beğenilen sıralama
+Proje ilk mock asamasini gecmis durumda. Uygulama artik:
 
-### 🛍️ Mağaza
-- SOL101 token ile item satın alma
-- Nadirlik seviyeleri: Common, Rare, Epic, Legendary
-- Kategori ve fiyat filtreleme
-- Gerçek zamanlı token bakiyesi takibi
-- Legendary item'lar için özel shimmer efekti
+- Solana cuzdan baglantisini destekler
+- Supabase Edge Functions uzerinden veri okuma/yazma yapar
+- Profil, forum, shop, market ve oyun entegrasyonu endpoint'lerine sahiptir
+- Bazi ekranlarda halen mock veri veya UI-only akis kullanir
 
-### 🤝 Pazar
-- Oyuncular arası P2P item takası
-- Token, item veya her ikisi ile takas seçenekleri
-- İlan süresi yönetimi (24/48/72 saat)
-- Gerçek zamanlı countdown timer
-- Takas teklifi gönderme sistemi
+Bu nedenle repo hem "canli entegrasyon" hem de "ileride tamamlanacak UI akislari" icerir.
 
-### 👤 Profil
-- Kişisel profil sayfası
-- Kullanıcı adı ve bio düzenleme
-- SOL ve token bakiyesi görüntüleme
-- Envanter yönetimi
-- Forum postları ve pazar ilanları sekmesi
+## Moduller
 
-## 🎨 Tasarım
+### Ana Sayfa
+- Platform istatistiklerini backend'den ceker
+- Forum, Shop, Market ve Profil modullerine yonlendirir
+- Istatistikler 30 saniyede bir yenilenir
 
-**"Cosmic Terminal"** teması ile:
-- **Tipografi**: Syne (başlıklar) + JetBrains Mono (içerik)
-- **Renkler**: Solana mor (#9945FF) ve yeşil (#14F195) aksan renkleri
-- **Light/Dark tema** desteği
-- Glassmorphism efekti kartlarda
-- Smooth animasyonlar ve geçişler
-- Mobile-first responsive tasarım
+### Forum
+- Post listeleme, filtreleme ve siralama desteklenir
+- Yeni post olusturma backend'e yazilir
+- Like/unlike islemleri backend ile calisir
+- UI tarafinda gorsel yukleme alani bulunur ancak dosya yukleme akisi henuz bagli degildir
 
-## 🔧 Teknolojiler
+### Shop
+- Token bilgisi backend'den alinabilir
+- Item listeleme ve satin alma akislarinin ana yolu backend endpoint'leri uzerinden ilerler
+- SPL token mint adresi tanimlanirsa wallet token bakiyesi zincirden okunur
+- Token mint adresi yoksa uygulama token bakiyesini `0` gosterir
 
-- **React** + **TypeScript**
-- **React Router** - Client-side routing
-- **Tailwind CSS** - Styling
-- **Solana Web3.js** - Blockchain entegrasyonu
-- **@solana/wallet-adapter** - Phantom wallet desteği
-- **Zustand** - State management
-- **Motion** - Animasyonlar
-- **Lucide React** - İkonlar
+### Market
+- Market endpoint'leri backend tarafinda mevcut
+- Listeleme backend verisi ile calisir
+- Listing ve trade akislari Supabase Edge Function uzerinden ilerler
+- Icerik olusturma akislarinda wallet auth kullanilir
 
-## 🚀 Başlangıç
+### Profil
+- Wallet baglantisi sonrasinda profil ve istatistikler backend'den cekilir
+- Profil guncelleme imzali istek ile backend'e yazilir
+- Envanter sekmesi backend envanteri ile calisir
+- Post ve listing sekmeleri sadeleştirilmistir; bu veriler yeniden eklenecekse backend kaynakli tasarlanmalidir
 
-### Wallet Bağlantısı
+### Oyun Entegrasyonu
+- Unity istemcisi ile tam entegre calisacak sekilde kurgulanmistir
+- Oyun tarafindan profil/stats senkronizasyonu yapilabilir
+- Oyun event'leri backend'e yazilabilir
+- Hedef, web ve Unity tarafinin ayni oyuncu verisini es zamanli veya yakin-gercek-zamanli guncellemesidir
+- Bu katman `docs/GAME_INTEGRATION.md` icinde ayrintili olarak anlatilir
 
-1. **Phantom Wallet** yükleyin: [phantom.app](https://phantom.app)
-2. Platformda "Connect Wallet" butonuna tıklayın
-3. Phantom'da Devnet'e geçin (Settings > Developer Settings > Testnet Mode)
-4. Test SOL alın: [faucet.solana.com](https://faucet.solana.com)
+## Unity Entegrasyon Hedefi
 
-### Platform Kullanımı
+Bu proje genel bir "oyun baglantisi" katmanindan ziyade Unity ile dogrudan entegre calisacak sekilde gelistirilmektedir.
 
-**Mağaza:**
-- Token bakiyeniz başlangıçta 1000 olarak ayarlanmıştır (mock)
-- Item satın almak için wallet bağlantısı gereklidir
-- Her item'ın nadirlik seviyesi kartın border rengi ile gösterilir
+Hedef davranis:
 
-**Forum:**
-- Post oluşturmak için wallet gereklidir
-- Maksimum 5 post/saat limiti vardır
-- Beğeni yapmak için wallet gereklidir
+- Unity istemcisi oyuncu ilerlemesini ve event'lerini DUAN backend'ine gonderecek
+- Web paneli ayni oyuncunun envanter, profil, trade ve achievement durumunu yansitacak
+- Kritik veri modelleri iki tarafta ortak sema mantigi ile ilerleyecek
+- Senkronizasyon mumkun oldugunca dusuk gecikmeli olacak
+- Cift tarafli veri tutarliligi icin auth, idempotency ve event-duzeni kurallari netlestirilecek
 
-**Pazar:**
-- İlan oluşturmak için envanterinizde item olmalıdır
-- Takas teklifleri diğer kullanıcılara bildirim olarak gider
-- İlanlar belirtilen süre sonunda otomatik expire olur
+Mevcut durum:
 
-**Profil:**
-- Kullanıcı adı maksimum 20 karakter
-- Bio maksimum 150 karakter
-- Envanterinizdeki tüm item'lar görüntülenir
+- HTTP tabanli sync ve event endpoint'leri mevcut
+- Unity tarafi icin temel entegrasyon dokumani mevcut
+- Tam gercek zamanli transport katmani ve veri normalizasyonu henuz tamamlanmamis
 
-## ⚠️ Önemli Notlar
+## Iki Repo Mimarisi
 
-- Bu platform **Solana Devnet** üzerinde çalışır
-- Gerçek SOL kullanılmaz - sadece test amaçlıdır
-- Tüm işlemler frontend'de mock data ile simüle edilir
-- Backend entegrasyonu için Supabase gereklidir (şu an sadece frontend)
+Sistem iki ayri repo ile birlikte calisacak:
 
-## 🎮 Kısayollar
+- Web repo: bu repo
+- Unity repo: `https://github.com/Sopwit/SOL-101-Unity`
 
-- `/` - Ana sayfa
-- `/forum` - Forum
-- `/shop` - Mağaza
-- `/market` - Pazar
-- `/profile` - Profil
+Sorumluluk ayrimi:
 
-## 🌙 Tema
+- Unity oyunun oynandigi ana istemci olacak
+- Web uygulamasi oyuncunun hesap, profil, forum, inventory, market ve sosyal akislarini gosterecek
+- Oyuncu ilerlemesi Unity tarafinda uretilecek
+- Inventory, profil, achievement, trade ve topluluk verileri web/backend tarafinda saklanacak veya orkestra edilecek
 
-Sağ üstteki ay/güneş ikonuna tıklayarak light/dark tema arasında geçiş yapabilirsiniz.
+Pratikte bu su anlama gelir:
+
+- Oyuncu oyunu Unity uzerinden oynar
+- Kazanilan item, XP, achievement ve event'ler backend'e aktarilir
+- Web paneli ayni kullanicinin envanterini, profilini ve sosyal etkilesimlerini gosterir
+- Her iki istemci ayni wallet veya oyuncu kimligi etrafinda baglanir
+
+## Source Of Truth
+
+Hedef mimaride veri sahipligi net olmalidir:
+
+- Unity: gameplay state, combat olaylari, loot kazanimi, checkpoint event'leri
+- Web/backend: profil, inventory kaydi, forum, market, token bilgisi, oyuncu istatistiklerinin paylasilan gorunumu
+
+Unity bir item kazandiginda bunu dogrudan lokal tek kaynak gibi tutmak yerine backend'e yazmali; web de ayni kaynagi okumali. Boylece iki taraf birbirinden kopmaz.
+
+## Mimari Ozet
+
+### Frontend
+- React 18
+- TypeScript
+- Vite
+- React Router
+- Tailwind CSS
+- shadcn/ui ve Radix UI bilesenleri
+- Zustand
+- next-themes
+- Solana wallet adapter
+
+### Backend
+- Supabase Edge Functions
+- Hono
+- Supabase KV benzeri saklama katmani (`functions/server/kv_store.tsx`)
+- TweetNaCl ile mesaj imza dogrulama
+
+## Dizin Yapisi
+
+```text
+src/
+  app/
+    components/     UI ve ortak bilesenler
+    contexts/       Dil ve benzeri context yapilari
+    hooks/          Balance gibi uygulama hook'lari
+    lib/            Mock veri ve yardimci kaynaklar
+    pages/          Route seviyesindeki ekranlar
+    services/       API istemcisi
+functions/
+  server/
+    index.tsx       Edge function route'lari
+    kv_store.tsx    Sunucu veri erisim katmani
+docs/
+  GAME_INTEGRATION.md
+  Guidelines.md
+  ATTRIBUTIONS.md
+```
+
+## Calistirma
+
+### Gereksinimler
+- Node.js 18+
+- npm
+- Supabase projesi
+- Solana test cuzdani, tercihen Phantom
+
+### Environment degiskenleri
+
+Ornek degiskenler icin [`.env.example`](./.env.example) dosyasini baz alin.
+
+Frontend `.env` dosyaniza en az su degerleri eklenmelidir:
+
+```bash
+VITE_SUPABASE_PROJECT_ID=your-project-id
+VITE_SUPABASE_ANON_KEY=your-anon-key
+VITE_SOLANA_CLUSTER=devnet
+VITE_SOLANA_RPC_URL=https://api.devnet.solana.com
+VITE_SOLANA_TOKEN_MINT=your-spl-token-mint-address
+```
+
+`VITE_SOLANA_RPC_URL` verilmezse uygulama `VITE_SOLANA_CLUSTER` degerine gore RPC endpoint secmeye calisir. O da verilmezse varsayilan `devnet` olur.
+
+Supabase Edge Function tarafinda da su degiskenler tanimli olmalidir:
+
+```bash
+SUPABASE_URL=https://your-project-id.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+```
+
+SQL migration adimlari icin [SUPABASE_SETUP.md](./docs/setup/SUPABASE_SETUP.md) dosyasini kullanin.
+
+### Komutlar
+
+```bash
+npm install
+npm run dev
+```
+
+Diger komutlar:
+
+```bash
+npm run build
+npm run preview
+npm run lint
+npm run format
+```
+
+## Backend API Ozet
+
+Edge function base path:
+
+```text
+https://<SUPABASE_PROJECT_ID>.supabase.co/functions/v1/make-server-5d6242bb
+```
+
+Mevcut route gruplari:
+
+- `GET /health`
+- `GET /stats/platform`
+- `GET /token/info`
+- `GET/PUT /profile/:walletAddress`
+- `GET /profile/:walletAddress/stats`
+- `GET/POST /inventory/:walletAddress`
+- `GET/POST /forum/posts`
+- `POST /forum/posts/:postId/like`
+- `GET /forum/posts/user/:walletAddress`
+- `GET /shop/items`
+- `POST /shop/purchase`
+- `GET/POST /market/listings`
+- `POST /market/listings/:listingId/trade`
+- `GET /market/listings/user/:walletAddress`
+- `POST /game/sync`
+- `POST /game/event`
+
+## Wallet Auth
+
+Bazi yazma islemleri ek olarak Solana mesaj imzasi ister. Frontend su header'lari yollar:
+
+```text
+Authorization: Bearer <SUPABASE_ANON_KEY>
+x-wallet-address: <walletAddress>
+x-wallet-message: <json-string-message>
+x-wallet-signature: <base64-signature>
+Content-Type: application/json
+```
+
+Imzalanan mesaj semasi:
+
+```json
+{
+  "domain": "DUAN",
+  "action": "profile:update",
+  "walletAddress": "wallet_public_key",
+  "timestamp": 1710000000000
+}
+```
+
+Sunucu mesajin:
+
+- `domain` degerini
+- `action` alanini
+- wallet adresini
+- zaman damgasini
+- detached signature gecerligini
+
+dogrular.
+
+## Bilinen Durumlar
+
+- Forum gorsel yukleme UI'da var ancak upload/backing storage entegrasyonu yok.
+- `VITE_SOLANA_TOKEN_MINT` tanimlanmadan DUAN token bakiyesi zincirden okunamaz.
+- Unity ve web istemcileri icin ortak veri kontratlari halen gelistirilmektedir.
+
+## Diger Dokumanlar
+
+- [Oyun entegrasyonu](./docs/GAME_INTEGRATION.md)
+- [Proje gelistirme rehberi](./docs/Guidelines.md)
+- [Atiflar](./docs/ATTRIBUTIONS.md)
