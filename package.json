@@ -7,11 +7,14 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "clean": "rm -rf dist .vite",
     "preview": "vite preview",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "format": "prettier --write \"src/**/*.{ts,tsx,css,md}\""
+    "format": "prettier --write \"src/**/*.{ts,tsx,css,md}\"",
+    "validate": "bash scripts/validate-project.sh"
   },
   "dependencies": {
+    "@coral-xyz/anchor": "^0.32.1",
     "@emotion/react": "11.14.0",
     "@emotion/styled": "11.14.1",
     "@mui/icons-material": "7.3.5",
@@ -79,11 +82,15 @@
     "zustand": "^5.0.11"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@tailwindcss/vite": "4.1.12",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "4.7.0",
+    "eslint": "^10.1.0",
+    "globals": "^17.4.0",
     "tailwindcss": "4.1.12",
+    "typescript-eslint": "^8.57.2",
     "vite": "6.3.5",
     "vite-plugin-node-polyfills": "^0.25.0"
   },

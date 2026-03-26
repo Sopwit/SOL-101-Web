@@ -137,7 +137,36 @@ docs/
   GAME_INTEGRATION.md
   Guidelines.md
   ATTRIBUTIONS.md
+  REPO_STRUCTURE_TR.md
+  SMOKE_TEST_TR.md
+  setup/
+    SUPABASE_SETUP.md
+    SOLANA_SETUP.md
 ```
+
+## Ozel Klasorler ve Veri Yollari
+
+Bu repoda her klasor ayni tipte degildir. Gelistirme yaparken su ayrimi koruyun:
+
+- `.github/`: CI ve depo otomasyonlari. Kaynak dosyadir, duzenlenebilir.
+- `.vite/`: Vite tarafindan uretilen gelistirme cache'i. Kaynak dosya degildir, elle duzenlenmemelidir.
+- `dist/`: `npm run build` sonrasi uretilen production ciktilari. Kaynak dosya degildir, tekrar uretilebilir.
+- `docs/`: urun, kurulum ve mimari belgeleri. Kaynak dosyadir, kodla birlikte guncel tutulmalidir.
+- `functions/server/`: Supabase Edge Function kaynagi. Veri yazma/okuma ve wallet auth burada merkezilesir.
+- `shared/`: frontend ve backend tarafinin ortak kullandigi ekonomik sabitler, kataloglar ve semalar.
+
+Temel veri yolları:
+
+- Frontend API istemcisi: `src/app/services/api.ts`
+- Edge Function giris noktasi: `functions/server/index.tsx`
+- KV erisim katmani: `functions/server/kv_store.tsx`
+- Shop katalog ve ekonomi sabitleri: `shared/shopCatalog.ts`, `shared/duanEconomy.ts`
+- Profil kozmetikleri: `shared/profileCosmetics.ts`
+
+Not:
+
+- `.vite/` ve `dist/` klasorleri repoda referans icin gorunse bile el ile guncellenmez.
+- Temizlik gerekiyorsa `npm run clean` kullanilabilir.
 
 ## Calistirma
 
@@ -163,6 +192,11 @@ VITE_SOLANA_TOKEN_MINT=your-spl-token-mint-address
 
 `VITE_SOLANA_RPC_URL` verilmezse uygulama `VITE_SOLANA_CLUSTER` degerine gore RPC endpoint secmeye calisir. O da verilmezse varsayilan `devnet` olur.
 
+Not:
+
+- `VITE_SUPABASE_URL` bu kod tabaninda aktif olarak kullanilmiyor; `VITE_SUPABASE_PROJECT_ID` yeterlidir.
+- `VITE_SOLANA_TOKEN_MINT` opsiyoneldir. Bos birakilirsa token bakiyesi zincirden okunmaz.
+
 Supabase Edge Function tarafinda da su degiskenler tanimli olmalidir:
 
 ```bash
@@ -171,6 +205,8 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 ```
 
 SQL migration adimlari icin [SUPABASE_SETUP.md](./docs/setup/SUPABASE_SETUP.md) dosyasini kullanin.
+Solana/RPC ve wallet akislari icin [SOLANA_SETUP.md](./docs/setup/SOLANA_SETUP.md) dosyasini kullanin.
+Demo veya deploy oncesi temel kontrol icin [SMOKE_TEST_TR.md](./docs/SMOKE_TEST_TR.md) dosyasini kullanin.
 
 ### Komutlar
 
@@ -182,10 +218,12 @@ npm run dev
 Diger komutlar:
 
 ```bash
+npm run clean
 npm run build
 npm run preview
 npm run lint
 npm run format
+npm run validate
 ```
 
 ## Backend API Ozet
@@ -202,14 +240,18 @@ Mevcut route gruplari:
 - `GET /stats/platform`
 - `GET /token/info`
 - `GET/PUT /profile/:walletAddress`
+- `POST /profile/:walletAddress/cosmetics/unlock`
 - `GET /profile/:walletAddress/stats`
 - `GET/POST /inventory/:walletAddress`
 - `GET/POST /forum/posts`
+- `DELETE /forum/posts/:postId`
+- `GET/POST /forum/posts/:postId/comments`
 - `POST /forum/posts/:postId/like`
 - `GET /forum/posts/user/:walletAddress`
 - `GET /shop/items`
 - `POST /shop/purchase`
 - `GET/POST /market/listings`
+- `DELETE /market/listings/:listingId`
 - `POST /market/listings/:listingId/trade`
 - `GET /market/listings/user/:walletAddress`
 - `POST /game/sync`

@@ -1,0 +1,29 @@
+[package]
+name = "duan_shop"
+version = "0.1.0"
+description = "On-chain shop state and pricing logic for DUAN"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "duan_shop"
+
+[features]
+# Anchor tarafinda farkli derleme senaryolari icin kullanilan feature seti.
+default = []
+idl-build = ["anchor-lang/idl-build"]
+cpi = ["no-entrypoint"]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+
+[lints.rust]
+# Anchor makrolarinin olusturdugu cfg kombinasyonlari icin gereksiz uyari
+# gurultusunu azaltir.
+unexpected_cfgs = { level = "allow", check-cfg = [
+  'cfg(feature, values("anchor-debug", "custom-heap", "custom-panic"))',
+  'cfg(target_os, values("solana"))',
+] }
+
+[dependencies]
+anchor-lang = { version = "0.32.1", features = ["init-if-needed"] }

@@ -1,16 +1,17 @@
-# Dependencies
+# Bagimliliklar
 node_modules/
 .pnpm-store/
 
-# Build outputs
+# Uretilen build ciktilari
 dist/
 build/
 .next/
+target/
 
-# Vite cache
+# Vite cache klasoru
 .vite/
 
-# Environments
+# Yerel environment dosyalari
 .env
 .env.local
 .env.development.local
@@ -18,22 +19,38 @@ build/
 .env.production.local
 .env.server.local
 
-# Debug logs
+# Debug ve paket yoneticisi loglari
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# IDE / Editor
+# Editor ve isletim sistemi dosyalari
 .vscode/
 .idea/
 *.swp
 *.swo
 .DS_Store
+.DS_Store?
+._*
+.AppleDouble
+.LSOverride
+.Spotlight-V100/
+.Trashes/
+Icon?
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.directory
+*~
+.fuse_hidden*
+.nfs*
 
-# Supabase
+# Supabase local ve gecici klasorleri
 .supabase/
+supabase/.temp/
 
-# Optional: Ignore temporary files
+# Gecici dosyalar
 tmp/
 temp/

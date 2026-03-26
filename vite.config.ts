@@ -4,14 +4,17 @@ import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { nodePolyfills } from 'vite-plugin-node-polyfills'
 
-export default defineConfig(({ mode }) => ({
+// Vite konfigurasyonu:
+// Solana kutuphanelerinin tarayicida calismasi icin gerekli polyfill'leri,
+// vendor chunk ayrimini ve temel alias tanimlarini tek yerde toplar.
+export default defineConfig(() => ({
   plugins: [
-    // The React and Tailwind plugins are both required for Make, even if
-    // Tailwind is not being actively used – do not remove them
+    // React ve Tailwind plugin'leri uygulama iskeletinin temel parcasidir.
+    // Tailwind aktif kullanilmayan bir ekranda bile plugin silinmemelidir.
     react(),
     tailwindcss(),
     nodePolyfills({
-      include: ['buffer', 'process', 'stream', 'crypto', 'util'],
+      include: ['buffer', 'process', 'stream', 'crypto', 'util', 'vm'],
       globals: {
         Buffer: true,
         global: true,
@@ -21,28 +24,67 @@ export default defineConfig(({ mode }) => ({
   ],
   resolve: {
     alias: {
-      // Alias @ to the src directory
+      // Uygulama ici import'larda src kokune kisa erisim.
       '@': path.resolve(__dirname, './src'),
-      // Buffer polyfill for Solana libraries
+      // Solana kutuphaneleri icin browser tarafinda Buffer cozumu.
       buffer: 'buffer/',
     },
   },
   define: {
-    // Define global for Solana libraries
+    // Bazi Solana paketleri global nesnesi bekledigi icin browser fallback'i.
     global: 'globalThis',
-    // Prevent Vite from externalizing buffer
+    // Vite'in process.env erisimini dissallastirmasini engeller.
     'process.env': {},
   },
   optimizeDeps: {
     esbuildOptions: {
-      // Node.js global polyfills
+      // Prebundle asamasinda global tanimlarini da ayni sekilde koru.
       define: {
         global: 'globalThis'
       },
     },
     include: ['buffer'],
   },
+  build: {
+    chunkSizeWarningLimit: 900,
+    rollupOptions: {
+      onwarn(warning, defaultHandler) {
+        // `ox` paketlerindeki hatali PURE annotation yorumu build'i bozmaz;
+        // bu nedenle sadece ilgili ucuncu parti uyarisi susturulur.
+        if (
+          warning.code === 'INVALID_ANNOTATION' &&
+          typeof warning.id === 'string' &&
+          warning.id.includes('/node_modules/ox/_esm/')
+        ) {
+          return
+        }
 
-  // File types to support raw imports. Never add .css, .tsx, or .ts files to this.
+        defaultHandler(warning)
+      },
+      output: {
+        manualChunks(id) {
+          // Ucuncu parti bagimliliklar ayri chunk'lara bolunerek ilk yukleme
+          // ve cache davranisi iyilestirilir.
+          if (!id.includes('node_modules')) {
+            return
+          }
+
+          if (id.includes('@solana') || id.includes('@coral-xyz') || id.includes('@walletconnect') || id.includes('@reown')) {
+            return 'solana-vendor'
+          }
+
+          if (id.includes('react') || id.includes('scheduler')) {
+            return 'react-vendor'
+          }
+
+          if (id.includes('motion') || id.includes('date-fns') || id.includes('lucide-react')) {
+            return 'ui-vendor'
+          }
+        },
+      },
+    },
+  },
+
+  // Ham varlik olarak import edilmesine izin verilen dosya tipleri.
   assetsInclude: ['**/*.svg', '**/*.csv'],
 }))

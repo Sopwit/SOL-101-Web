@@ -1,4 +1,4 @@
-import type { User, ForumPost, ShopItem, MarketListing, InventoryItem } from '../types';
+import type { User, ForumPost, ForumComment, ShopItem, MarketListing, InventoryItem } from '../types';
 
 const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
 const publicAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -95,6 +95,22 @@ class ApiService {
     }, walletAuth);
   }
 
+  async unlockProfileCosmetic(
+    walletAddress: string,
+    data: { slot: 'avatar' | 'background'; cosmeticId: string },
+    walletAuth?: WalletAuthHeaders
+  ): Promise<ApiResponse<{ profile: User; stats: {
+    rewardDuanBalance: number;
+    rewardSolBalance: number;
+    rewardDuanEarned: number;
+    rewardSolEarned: number;
+  } }>> {
+    return this.request(`/profile/${walletAddress}/cosmetics/unlock`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }, walletAuth);
+  }
+
   async getProfileStats(walletAddress: string): Promise<ApiResponse<{
     level: number;
     xp: number;
@@ -102,11 +118,17 @@ class ApiService {
     totalPosts: number;
     totalItems: number;
     totalTrades: number;
+    rewardDuanBalance: number;
+    rewardSolBalance: number;
+    rewardDuanEarned: number;
+    rewardSolEarned: number;
     achievements: Array<{
       id: string;
       name: string;
       description: string;
       icon: string;
+      rewardDuan?: number;
+      rewardSol?: number;
       unlockedAt: string;
     }>;
   }>> {
@@ -126,10 +148,12 @@ class ApiService {
   }
 
   // Forum API
-  async getPosts(filters?: { tag?: string; sort?: string }): Promise<ApiResponse<ForumPost[]>> {
+  async getPosts(filters?: { tag?: string; sort?: string; walletAddress?: string; language?: string }): Promise<ApiResponse<ForumPost[]>> {
     const params = new URLSearchParams();
     if (filters?.tag) params.append('tag', filters.tag);
     if (filters?.sort) params.append('sort', filters.sort);
+    if (filters?.walletAddress) params.append('walletAddress', filters.walletAddress);
+    if (filters?.language) params.append('language', filters.language);
     
     return this.request(`/forum/posts?${params.toString()}`, { method: 'GET' });
   }
@@ -146,10 +170,36 @@ class ApiService {
     }, walletAuth);
   }
 
-  async likePost(postId: string, walletAddress: string, walletAuth?: WalletAuthHeaders): Promise<ApiResponse<{ liked: boolean }>> {
+  async likePost(postId: string, walletAddress: string, walletAuth?: WalletAuthHeaders): Promise<ApiResponse<{ liked: boolean; likeCount: number }>> {
     return this.request(`/forum/posts/${postId}/like`, {
       method: 'POST',
       body: JSON.stringify({ walletAddress }),
+    }, walletAuth);
+  }
+
+  async deletePost(postId: string, walletAddress: string, walletAuth?: WalletAuthHeaders): Promise<ApiResponse<{ deleted: boolean }>> {
+    return this.request(`/forum/posts/${postId}`, {
+      method: 'DELETE',
+      body: JSON.stringify({ walletAddress }),
+    }, walletAuth);
+  }
+
+  async getComments(postId: string, language?: string): Promise<ApiResponse<ForumComment[]>> {
+    const params = new URLSearchParams();
+    if (language) params.append('language', language);
+    const suffix = params.toString();
+    return this.request(`/forum/posts/${postId}/comments${suffix ? `?${suffix}` : ''}`, { method: 'GET' });
+  }
+
+  async createComment(
+    postId: string,
+    walletAddress: string,
+    data: { content: string },
+    walletAuth?: WalletAuthHeaders
+  ): Promise<ApiResponse<ForumComment>> {
+    return this.request(`/forum/posts/${postId}/comments`, {
+      method: 'POST',
+      body: JSON.stringify({ walletAddress, ...data }),
     }, walletAuth);
   }
 
@@ -177,9 +227,10 @@ class ApiService {
   }
 
   // Market API
-  async getMarketListings(filters?: { status?: string }): Promise<ApiResponse<MarketListing[]>> {
+  async getMarketListings(filters?: { status?: string; language?: string }): Promise<ApiResponse<MarketListing[]>> {
     const params = new URLSearchParams();
     if (filters?.status) params.append('status', filters.status);
+    if (filters?.language) params.append('language', filters.language);
     
     return this.request(`/market/listings?${params.toString()}`, { method: 'GET' });
   }
@@ -208,8 +259,18 @@ class ApiService {
     }, walletAuth);
   }
 
-  async getListingsByWallet(walletAddress: string): Promise<ApiResponse<MarketListing[]>> {
-    return this.request(`/market/listings/user/${walletAddress}`, { method: 'GET' });
+  async getListingsByWallet(walletAddress: string, language?: string): Promise<ApiResponse<MarketListing[]>> {
+    const params = new URLSearchParams();
+    if (language) params.append('language', language);
+    const suffix = params.toString();
+    return this.request(`/market/listings/user/${walletAddress}${suffix ? `?${suffix}` : ''}`, { method: 'GET' });
+  }
+
+  async cancelListing(listingId: string, walletAddress: string, walletAuth?: WalletAuthHeaders): Promise<ApiResponse<{ cancelled: boolean }>> {
+    return this.request(`/market/listings/${listingId}`, {
+      method: 'DELETE',
+      body: JSON.stringify({ walletAddress }),
+    }, walletAuth);
   }
 
   // Game Integration Webhooks

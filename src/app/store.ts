@@ -5,6 +5,10 @@ interface User {
   username?: string;
   bio?: string;
   avatarUrl?: string;
+  selectedAvatarId?: string;
+  selectedBackgroundId?: string;
+  ownedAvatarIds?: string[];
+  ownedBackgroundIds?: string[];
 }
 
 interface AppStore {

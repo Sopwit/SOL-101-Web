@@ -15,6 +15,7 @@ Bu dosya, repo uzerinde calisan ekip uyeleri icin teknik ve dokumantasyon odakli
 ## Dokumantasyon Kurallari
 
 - `README.md` yuksek seviyeli urun durumu ve kurulum icin referans kaynaktir.
+- `docs/REPO_STRUCTURE_TR.md` repo haritasi ve klasor sorumluluklari icin referans kaynaktir.
 - `docs/GAME_INTEGRATION.md` sadece guncel, gercek endpoint'leri icermelidir.
 - Bilinen eksikler dokumanlardan saklanmamalidir; "tamamlanmadi", "mock", "UI-only" gibi ibareler net kullanilmalidir.
 - Endpoint, environment variable, route veya auth yapisi degistiginde ayni degisiklik ilgili dokumanda da yapilmalidir.
@@ -60,6 +61,8 @@ Bu dosya, repo uzerinde calisan ekip uyeleri icin teknik ve dokumantasyon odakli
 - Ortak UI bilesenleri `src/app/components` icinde tutulmali.
 - API cagrilari `src/app/services/api.ts` uzerinden merkezilesmeli.
 - Gecici mock veri `src/app/lib/mockData.ts` disina tasmamalidir.
+- `.vite/` ve `dist/` gibi uretilen klasorler kaynak kod gibi ele alinmamali, elle duzenlenmemelidir.
+- `functions/server/kv_store.tsx` auto-generated kabul edilmeli; dogrudan duzenlemek yerine upstream uretim kaynagi tercih edilmelidir.
 
 ## Test ve Dogrulama
 

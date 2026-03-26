@@ -11,12 +11,13 @@ import { router } from './routes';
 import { LanguageProvider } from './contexts/LanguageContext';
 import { Buffer } from 'buffer/';
 
-// Polyfill Buffer for Solana libraries
+// Solana adapter ve web3 kutuphaneleri tarayici ortaminda Buffer bekledigi icin
+// giriste tek seferlik polyfill uygulanir.
 if (typeof window !== 'undefined') {
   window.Buffer = window.Buffer || Buffer;
 }
 
-// Import wallet adapter CSS
+// Wallet modal bilesenlerinin temel stilleri.
 import '@solana/wallet-adapter-react-ui/styles.css';
 
 export default function App() {
@@ -33,7 +34,8 @@ export default function App() {
     return clusterApiUrl('devnet');
   }, []);
 
-  // Configure wallets
+  // Demo ve gelistirme akisinda tek wallet adaptoru yeterli oldugu icin
+  // Phantom varsayilan secim olarak tanimlanir.
   const wallets = useMemo(
     () => [
       new PhantomWalletAdapter(),

@@ -1,0 +1,22 @@
+[toolchain]
+
+[features]
+# Anchor komutlari icin temel davranis ayarlari.
+resolution = true
+skip-lint = false
+
+[programs.devnet]
+# Devnet program adresi frontend/on-chain istemci ile uyumlu tutulmalidir.
+duan_shop = "3bssRuvTNFzsGbawzSWtFgycQBXvL1vWXnq44XUSu5y3"
+
+[registry]
+url = "https://api.apr.dev"
+
+[provider]
+# Varsayilan local gelistirme profili.
+cluster = "devnet"
+wallet = "~/.config/solana/id.json"
+
+[scripts]
+# Operasyonel helper script tanimi.
+sync-shop = "node scripts/sync-onchain-shop.ts"

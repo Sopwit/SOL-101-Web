@@ -5,6 +5,7 @@ import { ArrowRight, ShoppingBag, MessageSquare, Store, User, TrendingUp } from 
 import { Button } from '../components/ui/button';
 import { GlassCard } from '../components/GlassCard';
 import { useLanguage } from '../contexts/LanguageContext';
+import { pageDataCache } from '../lib/pageDataCache';
 import { api } from '../services/api';
 
 interface PlatformStats {
@@ -15,33 +16,43 @@ interface PlatformStats {
 
 export function HomePage() {
   const { t } = useLanguage();
-  const [stats, setStats] = useState<PlatformStats>({ activeUsers: 0, totalItems: 0, completedTrades: 0 });
-  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState<PlatformStats>(() => pageDataCache.home.stats ?? { activeUsers: 0, totalItems: 0, completedTrades: 0 });
+  const [loading, setLoading] = useState(() => pageDataCache.home.stats === null);
 
   useEffect(() => {
-    const loadStats = async () => {
+    const loadStats = async (options?: { silent?: boolean }) => {
+      if (!options?.silent && pageDataCache.home.stats === null) {
+        setLoading(true);
+      }
       try {
         const response = await api.getPlatformStats();
         if (response.success && response.data) {
-          setStats({
+          const nextStats = {
             activeUsers: response.data.activeUsers,
             totalItems: response.data.totalItems,
             completedTrades: response.data.completedTrades,
-          });
+          };
+          setStats(nextStats);
+          pageDataCache.home.stats = nextStats;
+          pageDataCache.home.lastUpdatedAt = Date.now();
         } else {
           console.warn('Failed to load platform stats:', response.error);
         }
       } catch (error) {
         console.error('Error loading platform stats:', error);
       } finally {
-        setLoading(false);
+        if (!options?.silent) {
+          setLoading(false);
+        }
       }
     };
 
-    loadStats();
+    void loadStats();
     
     // Refresh stats every 30 seconds
-    const interval = setInterval(loadStats, 30000);
+    const interval = setInterval(() => {
+      void loadStats({ silent: true });
+    }, 30000);
     return () => clearInterval(interval);
   }, []);
 

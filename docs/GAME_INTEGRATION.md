@@ -1,71 +1,19 @@
 # DUAN Unity Entegrasyon Kilavuzu
 
-Bu dokuman, DUAN Unity istemcisinin DUAN web/backend katmani ile nasil konusacagini guncel kod tabanina gore aciklar. Hedef; Unity ve web uygulamasinin ayni oyuncu durumunu tutarli, hizli ve mumkun oldugunca es zamanli sekilde paylasmasidir.
+Bu belge, Unity istemcisi ile DUAN web/backend katmaninin mevcut kod tabanina gore nasil konusacagini aciklar. Amaç, Unity ve web istemcisinin ayni oyuncu verisini tutarli sekilde paylasmasidir.
 
-## Entegrasyon Hedefi
+## Entegrasyon Rol Dagilimi
 
-Unity entegrasyonu bu proje icin opsiyonel degil, cekirdek urun davranisidir.
+- Unity:
+  - gameplay olaylarini uretir
+  - item/loot/level ilerlemesini tetikler
+  - oyun akisini oyuncuya sunar
+- Web + backend:
+  - profil, forum, market ve inventory gorunumunu sunar
+  - ortak istatistikleri saklar
+  - sosyal ve ekonomik veriyi dagitir
 
-Beklenen sonuc:
-
-- Unity tarafinda olusan oyun ilerlemesi web tarafina yansir
-- Web uzerindeki profil, envanter ve trade verileri oyuncu durumuyla uyumlu kalir
-- Event temelli veri akisi dusuk gecikmeyle backend'e ulasir
-- Veri semalari iki istemci arasinda normalize edilir
-
-## Iki Uygulama, Tek Oyuncu Modeli
-
-Bu entegrasyonda roller nettir:
-
-- Unity projesi oyuncunun oyunu oynadigi istemcidir
-- Web projesi oyuncunun inventory, profil, forum ve market yuzudur
-- Her iki istemci ayni backend veri kontratini kullanir
-
-Oyuncu akis ornekleri:
-
-1. Oyuncu Unity'de sandik acar
-2. Loot sonucu backend'e event ve sync olarak yazilir
-3. Web uygulamasi ayni oyuncunun envanterinde yeni item'i gosterir
-
-1. Oyuncu Unity'de achievement acar
-2. Achievement backend uzerinden profile/stats alanina islenir
-3. Web tarafindaki profil sayfasi bunu gorur
-
-1. Oyuncu web'de profil veya sosyal alanlari kullanir
-2. Unity ayni oyuncu kimligi ile giris yaptiginda bu verilerin ilgili kismini okuyabilir
-
-## Veri Sahipligi
-
-Tutarlilik icin veri sahipligi soyle ele alinmalidir:
-
-- Unity uretir:
-  - gameplay event'leri
-  - loot kazanimi
-  - level progression
-  - moment-to-moment player state
-- Web/backend saklar ve dagitir:
-  - inventory kayitlari
-  - profile verisi
-  - forum icerigi
-  - market/trade verisi
-  - ortak oyuncu istatistik gorunumu
-
-Bu sayede oyuncu verisi tek merkezde tutulur; Unity ve web sadece farkli yuzler olur.
-
-## Mevcut Teknik Durum
-
-Bugunku kod tabaninda:
-
-- HTTP tabanli `game/sync` ve `game/event` endpoint'leri vardir
-- Profil, stats ve inventory okuma endpoint'leri vardir
-- Temel Unity/C# ornegi vardir
-
-Heniz tamamlanmayan kisimlar:
-
-- Gercek zamanli push/subscription katmani
-- Idempotent event tekrar kontrolu
-- Unity ve web arasinda tum inventory formatlarinin tek semada birlestirilmesi
-- Trade/shop akislarinin Unity tarafindan birebir tuketilecegi son veri kontratlari
+Bu projede hedef, iki farkli urun degil tek oyuncu deneyiminin iki istemcisidir.
 
 ## Base URL
 
@@ -73,11 +21,9 @@ Heniz tamamlanmayan kisimlar:
 https://<SUPABASE_PROJECT_ID>.supabase.co/functions/v1/make-server-5d6242bb
 ```
 
-Frontend tarafinda bu deger `VITE_SUPABASE_PROJECT_ID` ile olusturulur.
-
 ## Gerekli Header'lar
 
-Tum isteklerde:
+Tum backend isteklerinde en az su header'lar bulunmalidir:
 
 ```http
 Authorization: Bearer <SUPABASE_ANON_KEY>
@@ -85,16 +31,17 @@ Content-Type: application/json
 ```
 
 Not:
-- `game/sync` ve `game/event` endpoint'leri mevcut kodda wallet signature zorunlu kilmaz.
-- Profil, forum, shop ve market tarafindaki bazi yazma endpoint'leri ayrica wallet-signature ister.
 
-## Kullanilabilir Endpoint'ler
+- `game/sync` ve `game/event` endpoint'leri mevcut kodda wallet signature zorunlu kilmaz.
+- Profil, forum, shop ve market tarafindaki bazi yazma endpoint'leri wallet imzasi ister.
+
+## Oyun Tarafinin Kullanabilecegi Endpoint'ler
 
 ### 1. Oyun verisini senkronize et
 
 `POST /game/sync`
 
-Oyuncunun oyun ici ilerlemesini DUAN stats yapisina yazar.
+Oyuncunun level, xp, achievement ve odul item bilgisini backend tarafina yazar.
 
 #### Request body
 
@@ -108,13 +55,13 @@ Oyuncunun oyun ici ilerlemesini DUAN stats yapisina yazar.
 }
 ```
 
-#### Ne yapar
+#### Mevcut davranis
 
-- `stats:<walletAddress>` kaydini olusturur veya gunceller
-- `level` ve `xp` alanlarini yazar
-- `xpToNextLevel` alanini `level * 100` formulu ile hesaplar
-- Yeni achievement id'lerini achievement listesine ekler
-- `itemsEarned` icindeki kayitlari envantere `source: "game_reward"` ile ekler
+- `stats:<walletAddress>` kaydi olusturulur veya guncellenir
+- Seviye kuralı `XP_PER_LEVEL = 120` uzerinden normalize edilir
+- `xpToNextLevel` buna gore hesaplanir
+- Yeni achievement girdileri stats altina eklenir
+- `itemsEarned` item'lari inventory kaydi olarak eklenir
 
 #### Response
 
@@ -124,32 +71,11 @@ Oyuncunun oyun ici ilerlemesini DUAN stats yapisina yazar.
 }
 ```
 
-#### Ornek
-
-```ts
-const response = await fetch(`${API_BASE_URL}/game/sync`, {
-  method: 'POST',
-  headers: {
-    Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-    'Content-Type': 'application/json',
-  },
-  body: JSON.stringify({
-    walletAddress,
-    level: 8,
-    xp: 720,
-    achievements: ['boss_1_clear', 'speedrun_rank_c'],
-    itemsEarned: ['duan-reward-box'],
-  }),
-});
-
-const result = await response.json();
-```
-
 ### 2. Oyun eventi gonder
 
 `POST /game/event`
 
-Platform tarafinda event log tutmak veya sonraki isleme akislari icin ham olay yazmak icin kullanilir.
+Oyun ici olaylari backend tarafina loglamak veya sonraki is akislari icin kaydetmek icin kullanilir.
 
 #### Request body
 
@@ -174,29 +100,21 @@ Platform tarafinda event log tutmak veya sonraki isleme akislari icin ham olay y
 }
 ```
 
-#### Onerilen event type ornekleri
-
-- `level_up`
-- `achievement_unlocked`
-- `item_earned`
-- `boss_defeated`
-- `quest_completed`
-- `milestone_reached`
-
-Sunucu su anda event'i kaydeder ve loglar; event tipine gore ek is mantigi henuz minimal seviyededir.
-
 ### 3. Profil oku
 
 `GET /profile/:walletAddress`
 
-Profil kaydi yoksa backend varsayilan bir profil olusturur:
+Profil yoksa backend varsayilan profil olusturur. Mevcut varsayilan profil alanlari:
 
 ```json
 {
   "walletAddress": "wallet_public_key",
   "username": "Player_abcd",
   "bio": "",
-  "createdAt": "2026-03-23T10:00:00.000Z"
+  "selectedAvatarId": "default-avatar",
+  "selectedBackgroundId": "default-background",
+  "ownedAvatarIds": ["default-avatar"],
+  "ownedBackgroundIds": ["default-background"]
 }
 ```
 
@@ -204,16 +122,20 @@ Profil kaydi yoksa backend varsayilan bir profil olusturur:
 
 `GET /profile/:walletAddress/stats`
 
-Response yapisi:
+Mevcut response semasi sadece level/xp degil, odul bakiyelerini de icerir:
 
 ```json
 {
   "level": 1,
   "xp": 0,
-  "xpToNextLevel": 100,
+  "xpToNextLevel": 120,
   "totalPosts": 0,
   "totalItems": 0,
   "totalTrades": 0,
+  "rewardDuanBalance": 0,
+  "rewardSolBalance": 0,
+  "rewardDuanEarned": 0,
+  "rewardSolEarned": 0,
   "achievements": []
 }
 ```
@@ -222,11 +144,9 @@ Response yapisi:
 
 `GET /inventory/:walletAddress`
 
-Oyun tarafi, kullanicinin platform ve oyun kaynakli odullerini tek listede gorebilir.
+Unity tarafı, oyuncunun market/shop/game kaynakli item kayitlarini tek listede okuyabilir.
 
-### 6. Kullaniciyi odullendir
-
-Envantere basit bir kayit dusmek icin:
+### 6. Oyuncuya item kaydi ekle
 
 `POST /inventory/:walletAddress`
 
@@ -238,160 +158,30 @@ Envantere basit bir kayit dusmek icin:
 }
 ```
 
+#### Mevcut davranis
+
+- `itemId` katalogda bulunursa inventory kaydi ilgili `item` objesi ile yazilir
+- bulunamazsa endpoint hata dondurur
+- bu akış sunucu tarafinda su an wallet signature istemez
+
 Not:
-- Bu endpoint sunucu tarafinda su an signature dogrulamasi yapmiyor.
-- Oyun ici odul dagitimi icin `game/sync` icindeki `itemsEarned` alani daha tutarli bir yol olabilir.
-- `POST /inventory/:walletAddress` sonucu eklenen kayit sadece `itemId` tasir; `shop/purchase` gibi zengin `item` objesi donmez.
 
-## JavaScript Entegrasyon Ornegi
+- Oyun odulleri icin daha tutarli yol genelde `game/sync` icindeki `itemsEarned` alanidir
+- Bu sayede sync ve inventory mantigi ayni request icinde ilerler
 
-```ts
-const API_BASE_URL = `https://${projectId}.supabase.co/functions/v1/make-server-5d6242bb`;
+## Unity Tarafi Icin Onerilen Senaryo
 
-async function syncGameData(walletAddress, gameData) {
-  const response = await fetch(`${API_BASE_URL}/game/sync`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${anonKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      walletAddress,
-      ...gameData,
-    }),
-  });
+Oyun icinde bir event oldugunda:
 
-  if (!response.ok) {
-    throw new Error(`Sync failed: ${response.status}`);
-  }
-
-  return response.json();
-}
-
-async function triggerGameEvent(walletAddress, eventType, eventData) {
-  const response = await fetch(`${API_BASE_URL}/game/event`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${anonKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      walletAddress,
-      eventType,
-      eventData,
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Event failed: ${response.status}`);
-  }
-
-  return response.json();
-}
-```
-
-## Unity / C# Ornegi
-
-```csharp
-using System.Text;
-using UnityEngine;
-using UnityEngine.Networking;
-
-public async System.Threading.Tasks.Task<bool> TriggerGameEvent(
-    string apiBaseUrl,
-    string anonKey,
-    string walletAddress,
-    string eventType,
-    string eventDataJson)
-{
-    var payload = JsonUtility.ToJson(new EventRequest
-    {
-        walletAddress = walletAddress,
-        eventType = eventType,
-        eventData = eventDataJson
-    });
-
-    using var request = new UnityWebRequest($"{apiBaseUrl}/game/event", "POST");
-    var bodyRaw = Encoding.UTF8.GetBytes(payload);
-    request.uploadHandler = new UploadHandlerRaw(bodyRaw);
-    request.downloadHandler = new DownloadHandlerBuffer();
-    request.SetRequestHeader("Authorization", $"Bearer {anonKey}");
-    request.SetRequestHeader("Content-Type", "application/json");
-
-    var operation = request.SendWebRequest();
-    while (!operation.isDone)
-    {
-        await System.Threading.Tasks.Task.Yield();
-    }
-
-    return request.result == UnityWebRequest.Result.Success;
-}
-```
-
-## Senkronizasyon Stratejisi
-
-Onerilen model:
-
-1. Oyuncu oturum actiginda profil ve stats cekin.
-2. Oyun ici belirgin milestone'larda `game/event` cagin.
-3. Kritik oyun durumlarinda kucuk event paketleriyle ilerleyin; buyuk state'i gereksiz yere tekrar gondermeyin.
-4. Checkpoint, bolum sonu veya oturum kapanisinda `game/sync` ile toplu guncelleme yapin.
-5. Web tarafinda ayni oyuncu verisini goruntuleyen ekranlar polling veya ileride eklenecek realtime katman ile yenilenmelidir.
-4. UI tarafinda envanter gosterecekseniz `inventory/:walletAddress` verisini ayrica cekin.
-
-## Performans ve Tutarlilik Notlari
-
-Unity ile tam optimize ve es zamanliya yakin bir deneyim icin su kurallar izlenmelidir:
-
-- Her event benzersiz bir istemci event id ile gonderilmelidir
-- Ayni event tekrar gonderilse bile backend duplicate islem yapmamalidir
-- Buyuk obje yerine degisen alanlar gonderilmelidir
-- Inventory, achievement ve stats semalari Unity ve web tarafinda ortak tip mantigi ile tanimlanmalidir
-- Kritik ekranlar stale veri gostermemeli; okunma sikligi ve cache suresi kontrollu olmali
-- Auth modeli web ve Unity arasinda tek standarda inmeli
-
-## Ornek Akis
-
-Boss kesildi:
-
-1. `POST /game/event` ile `boss_defeated`
-2. Gerekliyse local state uzerinde odul hesaplama
-3. `POST /game/sync` ile yeni XP, level, achievement ve item listesi
-
-## Hata Yonetimi
-
-Onerilen kontroller:
-
-- `response.ok` kontrolu yapin
-- 401/403 icin anon key veya imza gerektiren endpoint kullanimini dogrulayin
-- 500 durumunda retry/backoff uygulayin
-- Ayni achievement veya item odulunun tekrar gonderilebilme riskini istemci tarafinda da yonetin
-
-Ornek basit retry:
-
-```ts
-async function withRetry(requestFn, retries = 3) {
-  let lastError;
-
-  for (let i = 0; i < retries; i += 1) {
-    try {
-      return await requestFn();
-    } catch (error) {
-      lastError = error;
-      await new Promise((resolve) => setTimeout(resolve, 500 * (i + 1)));
-    }
-  }
-
-  throw lastError;
-}
-```
+1. Kritik ilerleme veya odul varsa `POST /game/sync`
+2. Ham olay kaydi gerekiyorsa `POST /game/event`
+3. Web tarafinda profil veya inventory gorunumu ayni wallet ile okunur
 
 ## Bilinen Sinirlar
 
-- `game/event` verisi su an log/record merkezlidir; event bazli odul motoru yoktur.
-- `game/sync` item kayitlari sadece `itemId` saklayabilir; shop satin alimlarindaki kadar zengin item metadata'si olmayabilir.
-- Inventory formatlari farkli kaynaklara gore degisebilir:
-  - `shop/purchase` sonucu `item` objesi icerir
-  - `game/sync` ve `inventory/:walletAddress` bazi kayitlarda sadece `itemId` tasiyabilir
+- Gercek zamanli push/subscription katmani yok
+- Event idempotency mekanizmasi tam kurulmus degil
+- Unity tarafinda tum item formatlari icin tek son sema henuz finalize edilmedi
+- Shop ve market akislari Unity istemcisi tarafinda son veri kontratina tamamen baglanmis degil
 
-Bu fark uygulama veya oyun istemcisinde normalize edilmelidir.
+Bu belge, mevcut kaynak kodu yansitir; davranis degisirse `functions/server/index.tsx` ile birlikte guncellenmelidir.

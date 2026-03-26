@@ -1,12 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
-import { Filter, Heart, ImageIcon, MessageCircle, Plus, X } from 'lucide-react';
+import { Filter, Heart, ImageIcon, MessageCircle, Plus, Trash2, X } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { tr as trLocale, enUS } from 'date-fns/locale';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { toast } from 'sonner';
 import { useLanguage } from '../contexts/LanguageContext';
 import { createWalletAuth } from '../lib/walletAuth';
+import { pageDataCache } from '../lib/pageDataCache';
 import { GlassCard } from '../components/GlassCard';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
@@ -28,12 +29,12 @@ import {
 } from '../components/ui/select';
 import { Textarea } from '../components/ui/textarea';
 import { api } from '../services/api';
-import type { ForumPost } from '../types';
+import type { ForumComment, ForumPost } from '../types';
 
 export function ForumPage() {
   const { connected, publicKey, signMessage } = useWallet();
   const { t, language } = useLanguage();
-  const [posts, setPosts] = useState<ForumPost[]>([]);
+  const [posts, setPosts] = useState<ForumPost[]>(() => pageDataCache.forum.posts);
   const [filter, setFilter] = useState('newest');
   const [timeFilter, setTimeFilter] = useState('all');
   const [selectedTag, setSelectedTag] = useState('all');
@@ -44,27 +45,93 @@ export function ForumPage() {
   const [selectedPost, setSelectedPost] = useState<ForumPost | null>(null);
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(() => pageDataCache.forum.posts.length === 0);
+  const [comments, setComments] = useState<ForumComment[]>([]);
+  const [commentContent, setCommentContent] = useState('');
+  const [commentsLoading, setCommentsLoading] = useState(false);
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
+  const [pendingLikeIds, setPendingLikeIds] = useState<string[]>([]);
+  const commentsRequestIdRef = useRef(0);
 
   const loadPosts = async () => {
-    setIsLoading(true);
+    if (
+      pageDataCache.forum.posts.length === 0 ||
+      pageDataCache.forum.filter !== filter ||
+      pageDataCache.forum.language !== language
+    ) {
+      setIsLoading(true);
+    }
     try {
-      const response = await api.getPosts({ sort: filter });
+      const response = await api.getPosts({ sort: filter, walletAddress: publicKey?.toBase58(), language });
       if (response.success && response.data) {
         setPosts(response.data);
+        pageDataCache.forum.posts = response.data;
       } else {
         setPosts([]);
+        pageDataCache.forum.posts = [];
       }
+      pageDataCache.forum.filter = filter;
+      pageDataCache.forum.language = language;
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    loadPosts();
-  }, [filter]);
+    void loadPosts();
+  }, [filter, publicKey, language]);
 
-  const tags = ['#duan-game', '#item-showcase', '#progress', '#achievement', '#tips', '#trade-request', '#guide', '#question'];
+  const loadComments = async (postId: string) => {
+    const requestId = commentsRequestIdRef.current + 1;
+    commentsRequestIdRef.current = requestId;
+
+    const cachedComments = pageDataCache.forum.commentsByPost[`${postId}:${language}`];
+    if (cachedComments) {
+      setComments(cachedComments);
+    } else {
+      setComments([]);
+      setCommentsLoading(true);
+    }
+
+    try {
+      const response = await api.getComments(postId, language);
+      if (commentsRequestIdRef.current !== requestId) {
+        return;
+      }
+      const nextComments = response.success && response.data ? response.data : [];
+      setComments(nextComments);
+      pageDataCache.forum.commentsByPost[`${postId}:${language}`] = nextComments;
+    } finally {
+      if (commentsRequestIdRef.current === requestId) {
+        setCommentsLoading(false);
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (!detailDialogOpen || !selectedPost) {
+      commentsRequestIdRef.current += 1;
+      setComments([]);
+      setCommentContent('');
+      setCommentsLoading(false);
+      return;
+    }
+
+    void loadComments(selectedPost.id);
+  }, [detailDialogOpen, selectedPost, language]);
+
+  useEffect(() => {
+    if (!selectedPost) {
+      return;
+    }
+
+    const latestPost = posts.find((post) => post.id === selectedPost.id);
+    if (latestPost) {
+      setSelectedPost(latestPost);
+    }
+  }, [posts, selectedPost]);
+
+  const tags = ['#duan-token', '#solana-devnet', '#onchain-shop', '#market-strategy', '#loot-drop', '#build-update', '#guild-call', '#bug-report'];
 
   const toggleTag = (tag: string) => {
     setSelectedTags((prev) => (prev.includes(tag) ? prev.filter((value) => value !== tag) : [...prev, tag]));
@@ -75,22 +142,33 @@ export function ForumPage() {
       toast.error(t('error.walletRequired'));
       return;
     }
+    if (pendingLikeIds.includes(postId)) {
+      return;
+    }
 
     const walletAuth = await createWalletAuth({ publicKey, signMessage }, 'forum:like_post');
     if (!walletAuth) return;
 
-    const response = await api.likePost(postId, publicKey.toBase58(), walletAuth);
-    if (response.success && response.data) {
-      const liked = response.data.liked;
-      setPosts((prev) =>
-        prev.map((post) =>
-          post.id === postId
-            ? { ...post, isLiked: liked, likeCount: liked ? post.likeCount + 1 : Math.max(0, post.likeCount - 1) }
-            : post
-        )
-      );
-    } else {
-      toast.error(response.error || t('common.error'));
+    setPendingLikeIds((prev) => [...prev, postId]);
+    try {
+      const response = await api.likePost(postId, publicKey.toBase58(), walletAuth);
+      if (response.success && response.data) {
+        const { liked, likeCount } = response.data;
+        setPosts((prev) => {
+          const nextPosts = prev.map((post) =>
+            post.id === postId
+              ? { ...post, isLiked: liked, likeCount }
+              : post
+          );
+          pageDataCache.forum.posts = nextPosts;
+          return nextPosts;
+        });
+        setSelectedPost((prev) => prev && prev.id === postId ? { ...prev, isLiked: liked, likeCount } : prev);
+      } else {
+        toast.error(response.error || t('common.error'));
+      }
+    } finally {
+      setPendingLikeIds((prev) => prev.filter((id) => id !== postId));
     }
   };
 
@@ -118,16 +196,92 @@ export function ForumPage() {
     );
 
     if (response.success && response.data) {
-      setPosts((prev) => [response.data as ForumPost, ...prev]);
       setPostTitle('');
       setPostContent('');
       setSelectedTags([]);
       toast.success(t('common.success'));
+      await loadPosts();
     } else {
       toast.error(response.error || t('common.error'));
     }
 
     setIsCreating(false);
+  };
+
+  const handleDeletePost = async (postId: string, postWalletAddress: string) => {
+    if (!connected || !publicKey) {
+      toast.error(t('error.walletRequired'));
+      return;
+    }
+
+    if (publicKey.toBase58() !== postWalletAddress) {
+      toast.error(t('forum.deleteOwnOnly'));
+      return;
+    }
+
+    const walletAuth = await createWalletAuth({ publicKey, signMessage }, 'forum:delete_post');
+    if (!walletAuth) return;
+
+    const response = await api.deletePost(postId, publicKey.toBase58(), walletAuth);
+    if (response.success) {
+      setPosts((prev) => {
+        const nextPosts = prev.filter((post) => post.id !== postId);
+        pageDataCache.forum.posts = nextPosts;
+        return nextPosts;
+      });
+      Object.keys(pageDataCache.forum.commentsByPost)
+        .filter((key) => key.startsWith(`${postId}:`))
+        .forEach((key) => {
+          delete pageDataCache.forum.commentsByPost[key];
+        });
+      if (selectedPost?.id === postId) {
+        setDetailDialogOpen(false);
+        setSelectedPost(null);
+      }
+      toast.success(t('forum.deleteSuccess'));
+    } else {
+      toast.error(response.error || t('common.error'));
+    }
+  };
+
+  const handleCreateComment = async () => {
+    if (!connected || !publicKey) {
+      toast.error(t('error.walletRequired'));
+      return;
+    }
+
+    if (!selectedPost || !commentContent.trim()) {
+      toast.error(t('common.error'));
+      return;
+    }
+
+    const walletAuth = await createWalletAuth({ publicKey, signMessage }, 'forum:create_comment');
+    if (!walletAuth) return;
+
+    setIsSubmittingComment(true);
+    try {
+      const response = await api.createComment(selectedPost.id, publicKey.toBase58(), { content: commentContent.trim() }, walletAuth);
+      if (!response.success || !response.data) {
+        toast.error(response.error || t('common.error'));
+        return;
+      }
+
+      setCommentContent('');
+      setPosts((prev) => {
+        const nextPosts = prev.map((post) =>
+          post.id === selectedPost.id
+            ? { ...post, commentCount: post.commentCount + 1 }
+            : post
+        );
+        pageDataCache.forum.posts = nextPosts;
+        return nextPosts;
+      });
+      setSelectedPost((prev) => prev ? { ...prev, commentCount: prev.commentCount + 1 } : prev);
+      await loadComments(selectedPost.id);
+      toast.success(t('forum.commentSuccess'));
+    } finally {
+      setIsSubmittingComment(false);
+    }
   };
 
   const filteredPosts = posts
@@ -187,7 +341,7 @@ export function ForumPage() {
                 <label className="text-sm font-medium mb-2 block">{t('forum.image.label')}</label>
                 <div className="border-2 border-dashed border-border rounded-lg p-8 text-center">
                   <ImageIcon className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground">Mock gorsel yok. Yukleme entegrasyonu backend ile baglanacak.</p>
+                  <p className="text-sm text-muted-foreground">{t('forum.imageHint')}</p>
                 </div>
               </div>
               <div>
@@ -257,8 +411,8 @@ export function ForumPage() {
       ) : filteredPosts.length === 0 ? (
         <GlassCard className="p-12 text-center">
           <Filter className="w-14 h-14 mx-auto mb-4 text-muted-foreground" />
-          <h3 className="text-xl font-bold mb-2">Forumda henuz icerik yok</h3>
-          <p className="text-muted-foreground">Mock postlar kaldirildi. Yeni icerikler backend uzerinden gorunecek.</p>
+          <h3 className="text-xl font-bold mb-2">{t('forum.emptyTitle')}</h3>
+          <p className="text-muted-foreground">{t('forum.emptyDesc')}</p>
         </GlassCard>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -267,9 +421,28 @@ export function ForumPage() {
               <GlassCard hover className="p-5 h-full cursor-pointer" onClick={() => { setSelectedPost(post); setDetailDialogOpen(true); }}>
                 <div className="flex items-center justify-between mb-3">
                   <span className="text-sm font-medium">{post.username || post.walletAddress}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {formatDistanceToNow(new Date(post.createdAt), { addSuffix: true, locale: language === 'tr' ? trLocale : enUS })}
-                  </span>
+                  <div className="flex items-center gap-3">
+                    {post.isTranslated && (
+                      <Badge variant="secondary" className="text-[10px] uppercase tracking-wide">
+                        {t('forum.translated')}
+                      </Badge>
+                    )}
+                    <span className="text-xs text-muted-foreground">
+                      {formatDistanceToNow(new Date(post.createdAt), { addSuffix: true, locale: language === 'tr' ? trLocale : enUS })}
+                    </span>
+                    {connected && publicKey?.toBase58() === post.walletAddress && (
+                      <button
+                        className="text-muted-foreground hover:text-destructive transition-colors"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void handleDeletePost(post.id, post.walletAddress);
+                        }}
+                        aria-label={t('forum.deletePost')}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <h3 className="text-xl font-bold mb-2">{post.title}</h3>
                 <p className="text-muted-foreground line-clamp-4 mb-4">{post.content}</p>
@@ -277,7 +450,11 @@ export function ForumPage() {
                   {post.tags.map((tag) => <Badge key={tag} variant="outline">{tag}</Badge>)}
                 </div>
                 <div className="flex items-center gap-4">
-                  <button className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-primary" onClick={(e) => { e.stopPropagation(); void handleLike(post.id); }}>
+                  <button
+                    className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-primary disabled:opacity-60"
+                    onClick={(e) => { e.stopPropagation(); void handleLike(post.id); }}
+                    disabled={pendingLikeIds.includes(post.id)}
+                  >
                     <Heart className={`w-4 h-4 ${post.isLiked ? 'fill-current text-primary' : ''}`} />
                     {post.likeCount}
                   </button>
@@ -300,9 +477,60 @@ export function ForumPage() {
                 <DialogTitle>{selectedPost.title}</DialogTitle>
                 <DialogDescription>{selectedPost.username || selectedPost.walletAddress}</DialogDescription>
               </DialogHeader>
+              {connected && publicKey?.toBase58() === selectedPost.walletAddress && (
+                <Button
+                  variant="outline"
+                  className="w-full gap-2 text-destructive border-destructive/30 hover:bg-destructive/10"
+                  onClick={() => void handleDeletePost(selectedPost.id, selectedPost.walletAddress)}
+                >
+                  <Trash2 className="w-4 h-4" />
+                  {t('forum.deletePost')}
+                </Button>
+              )}
               <p className="text-sm leading-7">{selectedPost.content}</p>
               <div className="flex flex-wrap gap-2">
                 {selectedPost.tags.map((tag) => <Badge key={tag} variant="outline">{tag}</Badge>)}
+              </div>
+              <div className="space-y-3 pt-2">
+                <h4 className="font-semibold">{t('forum.comments')}</h4>
+                {commentsLoading ? (
+                  <p className="text-sm text-muted-foreground">{t('common.loading')}</p>
+                ) : comments.length > 0 ? (
+                  <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
+                    {comments.map((comment) => (
+                      <div key={comment.id} className="rounded-lg bg-muted/30 p-3">
+                        <div className="flex items-center justify-between gap-4 mb-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium">{comment.username || comment.walletAddress}</span>
+                            {comment.isTranslated && (
+                              <Badge variant="secondary" className="text-[10px] uppercase tracking-wide">
+                                {t('forum.translated')}
+                              </Badge>
+                            )}
+                          </div>
+                          <span className="text-xs text-muted-foreground">
+                            {formatDistanceToNow(new Date(comment.createdAt), { addSuffix: true, locale: language === 'tr' ? trLocale : enUS })}
+                          </span>
+                        </div>
+                        <p className="text-sm text-muted-foreground">{comment.content}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">{t('forum.noComments')}</p>
+                )}
+
+                <div className="space-y-3">
+                  <Textarea
+                    value={commentContent}
+                    onChange={(e) => setCommentContent(e.target.value)}
+                    rows={3}
+                    placeholder={t('forum.commentPlaceholder')}
+                  />
+                  <Button className="w-full" onClick={() => void handleCreateComment()} disabled={isSubmittingComment}>
+                    {isSubmittingComment ? t('common.loading') : t('forum.sendComment')}
+                  </Button>
+                </div>
               </div>
             </div>
           )}

@@ -1,6 +1,7 @@
 import { createBrowserRouter } from 'react-router';
 import { Layout } from './Layout';
-import { HomePage } from './pages/HomePage';
+import { AuthAwareHomeRedirect } from './components/AuthAwareHomeRedirect';
+import { AppErrorPage } from './pages/AppErrorPage';
 import { ForumPage } from './pages/ForumPage';
 import { ShopPage } from './pages/ShopPage';
 import { MarketPage } from './pages/MarketPage';
@@ -11,8 +12,9 @@ export const router = createBrowserRouter([
   {
     path: '/',
     Component: Layout,
+    errorElement: <AppErrorPage />,
     children: [
-      { index: true, Component: HomePage },
+      { index: true, Component: AuthAwareHomeRedirect },
       { path: 'forum', Component: ForumPage },
       { path: 'shop', Component: ShopPage },
       { path: 'market', Component: MarketPage },

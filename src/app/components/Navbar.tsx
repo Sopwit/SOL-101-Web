@@ -2,32 +2,39 @@ import { Link, useLocation } from 'react-router';
 import { ThemeToggle } from './ThemeToggle';
 import { LanguageToggle } from './LanguageToggle';
 import { WalletButton } from './WalletButton';
-import { Sparkles } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useWallet } from '@solana/wallet-adapter-react';
 
 export function Navbar() {
   const location = useLocation();
   const { t } = useLanguage();
+  const { connected } = useWallet();
 
   const navItems = [
     { path: '/forum', label: t('nav.forum') },
     { path: '/shop', label: t('nav.shop') },
-    { path: '/', label: t('nav.home') },
     { path: '/market', label: t('nav.market') },
     { path: '/profile', label: t('nav.profile') },
   ];
 
+  if (!connected) {
+    navItems.splice(2, 0, { path: '/', label: t('nav.home') });
+  }
+
   return (
     <nav className="sticky top-0 z-50 border-b border-border/40 bg-background/80 backdrop-blur-xl">
       <div className="container mx-auto px-4 py-4">
-        <div className="flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2 group">
-            <div className="w-10 h-10 bg-gradient-to-br from-primary to-secondary rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
-              <Sparkles className="w-6 h-6 text-white" />
-            </div>
-          </Link>
+        <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] items-center gap-4">
+          <div className="hidden md:flex items-center">
+            <Link
+              to="/"
+              className="text-lg font-black tracking-[0.22em] text-foreground transition-colors hover:text-primary"
+            >
+              DUAN
+            </Link>
+          </div>
 
-          <div className="hidden md:flex items-center gap-6">
+          <div className="hidden md:flex items-center justify-center gap-6">
             {navItems.map((item) => (
               <Link
                 key={item.path}
@@ -46,15 +53,23 @@ export function Navbar() {
             ))}
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center justify-end gap-3">
             <LanguageToggle />
             <ThemeToggle />
             <WalletButton />
           </div>
-        </div>
+      </div>
 
         {/* Mobile Navigation */}
-        <div className="md:hidden flex items-center gap-4 mt-4 overflow-x-auto pb-2 scrollbar-hide">
+        <div className="md:hidden flex items-center justify-between gap-4">
+          <Link
+            to="/"
+            className="text-base font-black tracking-[0.18em] text-foreground transition-colors hover:text-primary"
+          >
+            DUAN
+          </Link>
+        </div>
+        <div className="md:hidden flex items-center justify-center gap-4 mt-4 overflow-x-auto pb-2 scrollbar-hide">
           {navItems.map((item) => (
             <Link
               key={item.path}
