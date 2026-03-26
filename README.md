@@ -254,6 +254,7 @@ Mevcut route gruplari:
 - `DELETE /market/listings/:listingId`
 - `POST /market/listings/:listingId/trade`
 - `GET /market/listings/user/:walletAddress`
+- `GET /bootstrap/config`
 - `POST /game/sync`
 - `POST /game/event`
 

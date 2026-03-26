@@ -30,12 +30,51 @@ Authorization: Bearer <SUPABASE_ANON_KEY>
 Content-Type: application/json
 ```
 
+Wallet imzasi gereken endpoint'lerde ayrica su header'lar da gonderilmelidir:
+
+```http
+x-wallet-address: <wallet-public-key>
+x-wallet-message: {"domain":"DUAN","action":"game:sync",...}
+x-wallet-signature: <base64-signature>
+```
+
 Not:
 
-- `game/sync` ve `game/event` endpoint'leri mevcut kodda wallet signature zorunlu kilmaz.
-- Profil, forum, shop ve market tarafindaki bazi yazma endpoint'leri wallet imzasi ister.
+- `game/sync` icin `action = game:sync`
+- `game/event` icin `action = game:event`
+- Profil, forum, shop ve market tarafindaki yazma endpoint'leri de benzer wallet imzasi ister.
 
 ## Oyun Tarafinin Kullanabilecegi Endpoint'ler
+
+### 0. Bootstrap config oku
+
+`GET /bootstrap/config`
+
+Unity istemcisi tek cagri ile ortak runtime ayarlarini alabilir.
+
+#### Response
+
+```json
+{
+  "gameplay": {
+    "xpPerLevel": 120
+  },
+  "solana": {
+    "duanToSolRate": 0.00001,
+    "tokenMint": "optional-mint",
+    "treasury": "optional-treasury",
+    "programId": "optional-program-id"
+  },
+  "shopCatalog": [],
+  "cosmetics": {
+    "avatars": [],
+    "backgrounds": []
+  }
+}
+```
+
+Bu endpoint sayesinde Unity tarafinda shop katalogu, ekonomi sabitleri ve
+kozmetik listeleri ayri ayri hardcode edilmek zorunda kalmaz.
 
 ### 1. Oyun verisini senkronize et
 
@@ -52,6 +91,20 @@ Oyuncunun level, xp, achievement ve odul item bilgisini backend tarafina yazar.
   "xp": 350,
   "achievements": ["first_win", "speedrunner"],
   "itemsEarned": ["starter-sword", "crystal-key"]
+}
+```
+
+#### Wallet auth
+
+Bu endpoint wallet imzasi ister. Unity tarafi message icerigini soyle
+uretmelidir:
+
+```json
+{
+  "domain": "DUAN",
+  "action": "game:sync",
+  "walletAddress": "wallet_public_key",
+  "timestamp": 1710000000000
 }
 ```
 
@@ -91,6 +144,10 @@ Oyun ici olaylari backend tarafina loglamak veya sonraki is akislari icin kaydet
   }
 }
 ```
+
+#### Wallet auth
+
+Bu endpoint wallet imzasi ister ve `action = game:event` ile imzalanmalidir.
 
 #### Response
 
@@ -162,7 +219,8 @@ Unity tarafı, oyuncunun market/shop/game kaynakli item kayitlarini tek listede 
 
 - `itemId` katalogda bulunursa inventory kaydi ilgili `item` objesi ile yazilir
 - bulunamazsa endpoint hata dondurur
-- bu akış sunucu tarafinda su an wallet signature istemez
+- bu akış mevcut kodda wallet signature istemez, bu nedenle oyun ici odul
+  dagitimi icin ana yol olarak `game/sync` tercih edilmelidir
 
 Not:
 
@@ -173,9 +231,10 @@ Not:
 
 Oyun icinde bir event oldugunda:
 
-1. Kritik ilerleme veya odul varsa `POST /game/sync`
-2. Ham olay kaydi gerekiyorsa `POST /game/event`
-3. Web tarafinda profil veya inventory gorunumu ayni wallet ile okunur
+1. Oturum acilisinda `GET /bootstrap/config`
+2. Kritik ilerleme veya odul varsa `POST /game/sync`
+3. Ham olay kaydi gerekiyorsa `POST /game/event`
+4. Web tarafinda profil veya inventory gorunumu ayni wallet ile okunur
 
 ## Bilinen Sinirlar
 
@@ -183,5 +242,6 @@ Oyun icinde bir event oldugunda:
 - Event idempotency mekanizmasi tam kurulmus degil
 - Unity tarafinda tum item formatlari icin tek son sema henuz finalize edilmedi
 - Shop ve market akislari Unity istemcisi tarafinda son veri kontratina tamamen baglanmis degil
+- Unity tarafinda Solana wallet signing paketi secimi hala proje karari gerektirir
 
 Bu belge, mevcut kaynak kodu yansitir; davranis degisirse `functions/server/index.tsx` ile birlikte guncellenmelidir.

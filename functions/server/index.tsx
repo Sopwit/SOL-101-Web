@@ -122,6 +122,15 @@ function createTranslationCacheKey(scope: "post" | "comment", id: string, field:
   return `translation:${scope}:${id}:${field}:${language}`;
 }
 
+function getRuntimeSolanaConfig() {
+  return {
+    duanToSolRate: DUAN_TO_SOL_RATE,
+    tokenMint: Deno.env.get("SOLANA_TOKEN_MINT") ?? Deno.env.get("VITE_SOLANA_TOKEN_MINT") ?? null,
+    treasury: Deno.env.get("DUAN_SHOP_TREASURY") ?? null,
+    programId: Deno.env.get("DUAN_SHOP_PROGRAM_ID") ?? null,
+  };
+}
+
 // Ceviri servisi yanit vermezse akis bozulmaz; orijinal metin fallback olarak
 // korunur. Bu sayede forum ve market global gorunse de veri akisi kirilmaz.
 async function translateText(text: string, sourceLanguage: "tr" | "en", targetLanguage: "tr" | "en") {
@@ -679,6 +688,27 @@ app.get("/make-server-5d6242bb/token/info", async (c) => {
   } catch (error) {
     console.error("Error fetching token info:", error);
     return c.json({ error: "Failed to fetch token info" }, 500);
+  }
+});
+
+// Unity ve diger istemciler ortak item katalogunu, ekonomi sabitlerini ve
+// Solana baglanti ayarlarini bu endpoint uzerinden okuyabilir.
+app.get("/make-server-5d6242bb/bootstrap/config", async (c) => {
+  try {
+    return c.json({
+      gameplay: {
+        xpPerLevel: XP_PER_LEVEL,
+      },
+      solana: getRuntimeSolanaConfig(),
+      shopCatalog: SHOP_ITEM_CATALOG,
+      cosmetics: {
+        avatars: PROFILE_AVATAR_OPTIONS,
+        backgrounds: PROFILE_BACKGROUND_OPTIONS,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching bootstrap config:", error);
+    return c.json({ error: "Failed to fetch bootstrap config" }, 500);
   }
 });
 
@@ -1321,6 +1351,10 @@ app.get("/make-server-5d6242bb/market/listings/user/:walletAddress", async (c) =
 app.post("/make-server-5d6242bb/game/sync", async (c) => {
   try {
     const { walletAddress, level, xp, achievements, itemsEarned } = await c.req.json();
+    const auth = await verifyWalletAuth(c, "game:sync", walletAddress);
+    if (!auth.ok) {
+      return c.json({ error: auth.error }, auth.status);
+    }
 
     const stats = await getOrCreateStats(walletAddress);
 
@@ -1386,6 +1420,10 @@ app.post("/make-server-5d6242bb/game/sync", async (c) => {
 app.post("/make-server-5d6242bb/game/event", async (c) => {
   try {
     const { walletAddress, eventType, eventData } = await c.req.json();
+    const auth = await verifyWalletAuth(c, "game:event", walletAddress);
+    if (!auth.ok) {
+      return c.json({ error: auth.error }, auth.status);
+    }
 
     const event = {
       id: `event_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
