@@ -1,4 +1,4 @@
-import { getCatalogBaseDuanPrice } from "./duanEconomy";
+import { getCatalogBaseDuanPrice } from "./duanEconomy.ts";
 
 export type ShopCatalogItem = {
   id: string;

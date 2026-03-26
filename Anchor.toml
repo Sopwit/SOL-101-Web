@@ -8,6 +8,7 @@ skip-lint = false
 [programs.devnet]
 # Devnet program adresi frontend/on-chain istemci ile uyumlu tutulmalidir.
 duan_shop = "3bssRuvTNFzsGbawzSWtFgycQBXvL1vWXnq44XUSu5y3"
+duan_market = "9C7JgT4r9D4K1wVtwJAnYXhYzu3PV6PvJEa3TBUnVJWM"
 
 [registry]
 url = "https://api.apr.dev"
@@ -19,4 +20,4 @@ wallet = "~/.config/solana/id.json"
 
 [scripts]
 # Operasyonel helper script tanimi.
-sync-shop = "node scripts/sync-onchain-shop.ts"
+sync-shop = "node --experimental-strip-types scripts/sync-onchain-shop.ts"

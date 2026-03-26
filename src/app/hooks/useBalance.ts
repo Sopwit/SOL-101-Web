@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { PublicKey } from '@solana/web3.js';
+import { reportError } from '../lib/telemetry';
 import { useStore } from '../store';
 
 export function useBalance() {
@@ -25,7 +26,7 @@ export function useBalance() {
         setSolBalance(solLamports / 1e9);
         setTokenBalance(tokenBalance);
       } catch (error) {
-        console.error('Error fetching balance:', error);
+        reportError('wallet:balance', error, 'Cuzdan bakiyesi okunamadi');
       }
     };
 
@@ -42,7 +43,7 @@ export function useBalance() {
           return total + (typeof amount === 'number' ? amount : 0);
         }, 0);
       } catch (error) {
-        console.error('Error fetching SPL token balance:', error);
+        reportError('wallet:spl-balance', error, 'SPL token bakiyesi okunamadi');
         return 0;
       }
     };

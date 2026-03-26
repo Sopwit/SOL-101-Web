@@ -10,8 +10,16 @@
     "clean": "rm -rf dist .vite",
     "preview": "vite preview",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "test:smoke": "node --experimental-strip-types --test tests/*.test.mjs",
     "format": "prettier --write \"src/**/*.{ts,tsx,css,md}\"",
-    "validate": "bash scripts/validate-project.sh"
+    "validate": "bash scripts/validate-project.sh",
+    "solana:build": "anchor build",
+    "solana:sync-idl": "node scripts/sync-onchain-idl.mjs",
+    "solana:sync-market-idl": "node scripts/sync-onchain-market-idl.mjs",
+    "solana:create-mint": "node --experimental-strip-types scripts/create-duan-mint.ts",
+    "solana:sync-shop": "node --experimental-strip-types scripts/sync-onchain-shop.ts",
+    "solana:set-game-authority": "node --experimental-strip-types scripts/set-game-authority.ts",
+    "solana:bootstrap": "npm run solana:build && npm run solana:sync-idl && npm run solana:sync-market-idl && npm run solana:sync-shop"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.32.1",
@@ -46,6 +54,7 @@
     "@radix-ui/react-toggle": "1.1.2",
     "@radix-ui/react-toggle-group": "1.1.2",
     "@radix-ui/react-tooltip": "1.1.8",
+    "@solana/spl-token": "^0.4.14",
     "@solana/wallet-adapter-base": "^0.9.27",
     "@solana/wallet-adapter-react": "^0.15.39",
     "@solana/wallet-adapter-react-ui": "^0.9.39",

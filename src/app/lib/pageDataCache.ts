@@ -16,6 +16,19 @@ export const pageDataCache: {
       totalItems: number;
       completedTrades: number;
     } | null;
+    tokenInfo: TokenInfoCache | null;
+    runtime: {
+      cluster: string;
+      rpcReachable: boolean;
+      programDeployed: boolean;
+      shopConfigInitialized: boolean;
+    } | null;
+    onchainCatalog: {
+      itemCount: number;
+      status: string;
+      code: string;
+      missingItemIds: string[];
+    } | null;
     lastUpdatedAt: number | null;
   };
   shop: {
@@ -63,6 +76,9 @@ export const pageDataCache: {
 } = {
   home: {
     stats: null,
+    tokenInfo: null,
+    runtime: null,
+    onchainCatalog: null,
     lastUpdatedAt: null,
   },
   shop: {

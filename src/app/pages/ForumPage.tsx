@@ -9,6 +9,12 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { createWalletAuth } from '../lib/walletAuth';
 import { pageDataCache } from '../lib/pageDataCache';
 import { GlassCard } from '../components/GlassCard';
+import { ContentGridSkeleton } from '../components/ContentGridSkeleton';
+import { EmptyStateCard, LoadingStateCard, MaintenanceStateCard } from '../components/ModuleStateCard';
+import { ImageWithFallback } from '../components/figma/ImageWithFallback';
+import { NotificationRail } from '../components/NotificationRail';
+import { PageHero } from '../components/PageHero';
+import { PageShell } from '../components/PageShell';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import {
@@ -28,10 +34,13 @@ import {
   SelectValue,
 } from '../components/ui/select';
 import { Textarea } from '../components/ui/textarea';
+import { useAdminAccess } from '../hooks/useAdminAccess';
 import { api } from '../services/api';
+import type { SystemStatusItem } from '../types';
 import type { ForumComment, ForumPost } from '../types';
 
 export function ForumPage() {
+  const { isAdmin } = useAdminAccess();
   const { connected, publicKey, signMessage } = useWallet();
   const { t, language } = useLanguage();
   const [posts, setPosts] = useState<ForumPost[]>(() => pageDataCache.forum.posts);
@@ -42,15 +51,19 @@ export function ForumPage() {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [postTitle, setPostTitle] = useState('');
   const [postContent, setPostContent] = useState('');
+  const [postImageUrl, setPostImageUrl] = useState('');
   const [selectedPost, setSelectedPost] = useState<ForumPost | null>(null);
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [isLoading, setIsLoading] = useState(() => pageDataCache.forum.posts.length === 0);
+  const [postsError, setPostsError] = useState<string | null>(null);
   const [comments, setComments] = useState<ForumComment[]>([]);
   const [commentContent, setCommentContent] = useState('');
   const [commentsLoading, setCommentsLoading] = useState(false);
+  const [commentsError, setCommentsError] = useState<string | null>(null);
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [pendingLikeIds, setPendingLikeIds] = useState<string[]>([]);
+  const [statusCheckedAt, setStatusCheckedAt] = useState<string | null>(null);
   const commentsRequestIdRef = useRef(0);
 
   const loadPosts = async () => {
@@ -66,14 +79,21 @@ export function ForumPage() {
       if (response.success && response.data) {
         setPosts(response.data);
         pageDataCache.forum.posts = response.data;
+        setPostsError(null);
       } else {
         setPosts([]);
         pageDataCache.forum.posts = [];
+        setPostsError(response.error || 'Forum feed backend tarafindan yuklenemedi.');
       }
       pageDataCache.forum.filter = filter;
       pageDataCache.forum.language = language;
     } finally {
       setIsLoading(false);
+      setStatusCheckedAt(new Date().toLocaleTimeString(language === 'tr' ? 'tr-TR' : 'en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      }));
     }
   };
 
@@ -99,11 +119,17 @@ export function ForumPage() {
         return;
       }
       const nextComments = response.success && response.data ? response.data : [];
+      setCommentsError(response.success ? null : (response.error || 'Forum yorumlari backend tarafindan yuklenemedi.'));
       setComments(nextComments);
       pageDataCache.forum.commentsByPost[`${postId}:${language}`] = nextComments;
     } finally {
       if (commentsRequestIdRef.current === requestId) {
         setCommentsLoading(false);
+        setStatusCheckedAt(new Date().toLocaleTimeString(language === 'tr' ? 'tr-TR' : 'en-US', {
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+        }));
       }
     }
   };
@@ -136,6 +162,10 @@ export function ForumPage() {
   const toggleTag = (tag: string) => {
     setSelectedTags((prev) => (prev.includes(tag) ? prev.filter((value) => value !== tag) : [...prev, tag]));
   };
+
+  const normalizedPostImageUrl = postImageUrl.trim();
+  const postImagePreviewVisible = normalizedPostImageUrl.length > 0;
+  const postImageUrlValid = !normalizedPostImageUrl || /^https?:\/\/.+/i.test(normalizedPostImageUrl);
 
   const handleLike = async (postId: string) => {
     if (!connected || !publicKey) {
@@ -181,6 +211,10 @@ export function ForumPage() {
       toast.error(t('common.error'));
       return;
     }
+    if (!postImageUrlValid) {
+      toast.error('Medya baglantisi gecerli bir http/https adresi olmali.');
+      return;
+    }
 
     setIsCreating(true);
     const walletAuth = await createWalletAuth({ publicKey, signMessage }, 'forum:create_post');
@@ -191,13 +225,19 @@ export function ForumPage() {
 
     const response = await api.createPost(
       publicKey.toBase58(),
-      { title: postTitle.trim(), content: postContent.trim(), tags: selectedTags },
+      {
+        title: postTitle.trim(),
+        content: postContent.trim(),
+        imageUrl: normalizedPostImageUrl || undefined,
+        tags: selectedTags,
+      },
       walletAuth
     );
 
     if (response.success && response.data) {
       setPostTitle('');
       setPostContent('');
+      setPostImageUrl('');
       setSelectedTags([]);
       toast.success(t('common.success'));
       await loadPosts();
@@ -308,76 +348,142 @@ export function ForumPage() {
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
 
+  const forumStatuses: SystemStatusItem[] = [
+    {
+      id: 'forum-backend-feed',
+      source: 'backend',
+      state: postsError ? 'degraded' : 'healthy',
+      severity: postsError ? 'warning' : 'info',
+      title: 'Backend Forum Feed',
+      detail: postsError || 'Forum post akisi backend uzerinden normal calisiyor.',
+      checkedAt: statusCheckedAt || undefined,
+    },
+    {
+      id: 'forum-backend-comments',
+      source: 'backend',
+      state: commentsError ? 'degraded' : 'healthy',
+      severity: commentsError ? 'warning' : 'info',
+      title: 'Comment Stream',
+      detail: commentsError || 'Post detaylari acildiginda yorum akisi backend uzerinden getiriliyor.',
+      checkedAt: statusCheckedAt || undefined,
+    },
+    {
+      id: 'forum-media',
+      source: 'assets',
+      state: postImagePreviewVisible && !postImageUrlValid ? 'degraded' : 'healthy',
+      severity: postImagePreviewVisible && !postImageUrlValid ? 'warning' : 'info',
+      title: 'Media Attachments',
+      detail: postImagePreviewVisible
+        ? postImageUrlValid
+          ? 'Yeni post akisinda harici medya baglantisi kullanilmaya hazir.'
+          : 'Medya baglantisi gecersiz. Yalnizca http/https URL kullanilmali.'
+        : 'Forum postlarinda opsiyonel gorsel baglantisi destekleniyor.',
+      checkedAt: statusCheckedAt || undefined,
+    },
+  ];
+
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-8">
-        <div>
-          <h1 className="text-4xl font-bold mb-2">{t('forum.title')}</h1>
-          <p className="text-muted-foreground">{t('forum.subtitle')}</p>
-        </div>
+    <>
+      <PageShell
+        hero={(
+          <PageHero
+            eyebrow="COMMUNITY FORUM"
+            title={t('forum.title')}
+            description={t('forum.subtitle')}
+            accent="from-orange-400/15 via-amber-300/10 to-yellow-200/20"
+            panelTitle="LIVE DISCUSSIONS"
+            panelBody="Yorumlar, begeniler ve filtreler tek sosyal akis icinde tutulur. Siralama ve dil tercihiyle aninda yenilenir."
+            metrics={[
+              { label: 'Posts', value: `${posts.length}` },
+              { label: 'Filtered', value: `${filteredPosts.length}` },
+              { label: 'Tags', value: `${tags.length}` },
+            ]}
+            actions={(
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button className="gap-2">
+                    <Plus className="w-5 h-5" />
+                    {t('forum.newPost')}
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle>{t('forum.createPost')}</DialogTitle>
+                    <DialogDescription>{t('forum.createPostDesc')}</DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-5">
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">{t('forum.title.label')}</label>
+                      <Input value={postTitle} onChange={(e) => setPostTitle(e.target.value)} maxLength={100} />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">{t('forum.description.label')}</label>
+                      <Textarea value={postContent} onChange={(e) => setPostContent(e.target.value)} rows={6} maxLength={1000} />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">{t('forum.image.label')}</label>
+                      <div className="space-y-4 rounded-[1.5rem] border border-border/50 bg-muted/20 p-5">
+                        <Input
+                          value={postImageUrl}
+                          onChange={(e) => setPostImageUrl(e.target.value)}
+                          placeholder="https://..."
+                        />
+                        <div className="rounded-[1.25rem] border border-dashed border-border/60 bg-background/40 p-6 text-center">
+                          {postImagePreviewVisible && postImageUrlValid ? (
+                            <div className="space-y-3">
+                              <ImageWithFallback src={normalizedPostImageUrl} alt="Forum media preview" className="mx-auto aspect-video w-full max-w-xl rounded-[1.1rem] object-cover" />
+                              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Media Preview</p>
+                            </div>
+                          ) : (
+                            <>
+                              <ImageIcon className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
+                              <p className="text-sm text-muted-foreground">{t('forum.imageHint')}</p>
+                              {postImagePreviewVisible && !postImageUrlValid ? (
+                                <p className="mt-2 text-xs font-medium text-amber-600">Gecerli bir http/https medya baglantisi gir.</p>
+                              ) : null}
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">{t('forum.tags.label')}</label>
+                      <div className="flex flex-wrap gap-2 mb-3">
+                        {selectedTags.map((tag) => (
+                          <Badge key={tag} className="gap-1 pr-1">
+                            {tag}
+                            <button onClick={() => toggleTag(tag)} className="ml-1 hover:bg-background/20 rounded-full p-0.5">
+                              <X className="w-3 h-3" />
+                            </button>
+                          </Badge>
+                        ))}
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {tags.filter((tag) => !selectedTags.includes(tag)).map((tag) => (
+                          <Badge
+                            key={tag}
+                            variant="outline"
+                            className="cursor-pointer hover:bg-primary hover:text-primary-foreground transition-colors"
+                            onClick={() => toggleTag(tag)}
+                          >
+                            + {tag}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                    <Button className="w-full" onClick={handleCreatePost} disabled={isCreating}>
+                      {isCreating ? t('common.loading') : t('forum.createPost')}
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            )}
+          />
+        )}
+      >
 
-        <Dialog>
-          <DialogTrigger asChild>
-            <Button className="gap-2">
-              <Plus className="w-5 h-5" />
-              {t('forum.newPost')}
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>{t('forum.createPost')}</DialogTitle>
-              <DialogDescription>{t('forum.createPostDesc')}</DialogDescription>
-            </DialogHeader>
-            <div className="space-y-5">
-              <div>
-                <label className="text-sm font-medium mb-2 block">{t('forum.title.label')}</label>
-                <Input value={postTitle} onChange={(e) => setPostTitle(e.target.value)} maxLength={100} />
-              </div>
-              <div>
-                <label className="text-sm font-medium mb-2 block">{t('forum.description.label')}</label>
-                <Textarea value={postContent} onChange={(e) => setPostContent(e.target.value)} rows={6} maxLength={1000} />
-              </div>
-              <div>
-                <label className="text-sm font-medium mb-2 block">{t('forum.image.label')}</label>
-                <div className="border-2 border-dashed border-border rounded-lg p-8 text-center">
-                  <ImageIcon className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground">{t('forum.imageHint')}</p>
-                </div>
-              </div>
-              <div>
-                <label className="text-sm font-medium mb-2 block">{t('forum.tags.label')}</label>
-                <div className="flex flex-wrap gap-2 mb-3">
-                  {selectedTags.map((tag) => (
-                    <Badge key={tag} className="gap-1 pr-1">
-                      {tag}
-                      <button onClick={() => toggleTag(tag)} className="ml-1 hover:bg-background/20 rounded-full p-0.5">
-                        <X className="w-3 h-3" />
-                      </button>
-                    </Badge>
-                  ))}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {tags.filter((tag) => !selectedTags.includes(tag)).map((tag) => (
-                    <Badge
-                      key={tag}
-                      variant="outline"
-                      className="cursor-pointer hover:bg-primary hover:text-primary-foreground transition-colors"
-                      onClick={() => toggleTag(tag)}
-                    >
-                      + {tag}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-              <Button className="w-full" onClick={handleCreatePost} disabled={isCreating}>
-                {isCreating ? t('common.loading') : t('forum.createPost')}
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-[1fr_220px] gap-6 mb-8">
+      <GlassCard className="p-5 md:p-6">
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_220px]">
         <div className="flex flex-col md:flex-row gap-4">
           <Input placeholder={t('common.search')} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
           <Select value={filter} onValueChange={setFilter}>
@@ -404,22 +510,40 @@ export function ForumPage() {
             {tags.map((tag) => <SelectItem key={tag} value={tag}>{tag}</SelectItem>)}
           </SelectContent>
         </Select>
-      </div>
+        </div>
+      </GlassCard>
 
       {isLoading ? (
-        <GlassCard className="p-12 text-center">{t('common.loading')}</GlassCard>
+        <>
+          <LoadingStateCard
+            title="Forum akisi hazirlaniyor"
+            description="Postlar, filtreler ve topluluk sinyalleri yukleniyor."
+          />
+          <ContentGridSkeleton count={4} cardClassName="overflow-hidden p-0" imageClassName="aspect-[16/9]" contentLines={4} />
+        </>
+      ) : postsError && filteredPosts.length === 0 ? (
+        <MaintenanceStateCard
+          title="Forum akisi gecici olarak kisitli"
+          description={postsError}
+          onAction={() => { void loadPosts(); }}
+        />
       ) : filteredPosts.length === 0 ? (
-        <GlassCard className="p-12 text-center">
-          <Filter className="w-14 h-14 mx-auto mb-4 text-muted-foreground" />
-          <h3 className="text-xl font-bold mb-2">{t('forum.emptyTitle')}</h3>
-          <p className="text-muted-foreground">{t('forum.emptyDesc')}</p>
-        </GlassCard>
+        <EmptyStateCard
+          title={t('forum.emptyTitle')}
+          description={t('forum.emptyDesc')}
+          icon={Filter}
+        />
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
           {filteredPosts.map((post, index) => (
             <motion.div key={post.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05, duration: 0.3 }}>
-              <GlassCard hover className="p-5 h-full cursor-pointer" onClick={() => { setSelectedPost(post); setDetailDialogOpen(true); }}>
-                <div className="flex items-center justify-between mb-3">
+              <GlassCard hover className="h-full cursor-pointer p-6" onClick={() => { setSelectedPost(post); setDetailDialogOpen(true); }}>
+                {post.imageUrl ? (
+                  <div className="mb-5 overflow-hidden rounded-[1.25rem]">
+                    <ImageWithFallback src={post.imageUrl} alt={post.title} className="aspect-[16/9] w-full object-cover" />
+                  </div>
+                ) : null}
+                <div className="mb-4 flex items-center justify-between">
                   <span className="text-sm font-medium">{post.username || post.walletAddress}</span>
                   <div className="flex items-center gap-3">
                     {post.isTranslated && (
@@ -444,9 +568,9 @@ export function ForumPage() {
                     )}
                   </div>
                 </div>
-                <h3 className="text-xl font-bold mb-2">{post.title}</h3>
-                <p className="text-muted-foreground line-clamp-4 mb-4">{post.content}</p>
-                <div className="flex flex-wrap gap-2 mb-4">
+                <h3 className="mb-3 text-xl font-bold leading-8">{post.title}</h3>
+                <p className="mb-5 line-clamp-4 text-muted-foreground leading-7">{post.content}</p>
+                <div className="mb-5 flex flex-wrap gap-2">
                   {post.tags.map((tag) => <Badge key={tag} variant="outline">{tag}</Badge>)}
                 </div>
                 <div className="flex items-center gap-4">
@@ -477,6 +601,9 @@ export function ForumPage() {
                 <DialogTitle>{selectedPost.title}</DialogTitle>
                 <DialogDescription>{selectedPost.username || selectedPost.walletAddress}</DialogDescription>
               </DialogHeader>
+              {selectedPost.imageUrl ? (
+                <ImageWithFallback src={selectedPost.imageUrl} alt={selectedPost.title} className="w-full aspect-[16/9] rounded-[1.25rem] object-cover" />
+              ) : null}
               {connected && publicKey?.toBase58() === selectedPost.walletAddress && (
                 <Button
                   variant="outline"
@@ -536,6 +663,15 @@ export function ForumPage() {
           )}
         </DialogContent>
       </Dialog>
-    </div>
+      </PageShell>
+      {isAdmin ? (
+        <NotificationRail
+          title="Forum Durum Merkezi"
+          description="Burada forum akisi icin post ve yorum servislerinin durumunu gorebilirsin."
+          triggerLabel="Forum Status"
+          items={forumStatuses}
+        />
+      ) : null}
+    </>
   );
 }

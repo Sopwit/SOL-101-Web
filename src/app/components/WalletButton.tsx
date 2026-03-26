@@ -21,6 +21,6 @@ export function WalletButton() {
   }, [connected, publicKey, setUser]);
 
   return (
-    <WalletMultiButton className="!bg-primary hover:!bg-primary/90 !text-primary-foreground !rounded-lg !px-4 !py-2 !h-auto !font-medium transition-all" />
+    <WalletMultiButton className="!h-11 !rounded-full !bg-primary !px-5 !py-2.5 !text-primary-foreground !font-semibold !shadow-[0_16px_32px_-18px_rgba(34,197,94,0.38)] transition-all hover:!bg-primary/90" />
   );
 }

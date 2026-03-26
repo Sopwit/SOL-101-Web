@@ -1,18 +1,17 @@
-import { createBrowserRouter, createHashRouter } from 'react-router';
+import { Navigate, createBrowserRouter, createHashRouter } from 'react-router';
+import { AdminRoute } from './components/AdminRoute';
 import { Layout } from './Layout';
 import { AuthAwareHomeRedirect } from './components/AuthAwareHomeRedirect';
 import { AppErrorPage } from './pages/AppErrorPage';
-import { ForumPage } from './pages/ForumPage';
-import { ShopPage } from './pages/ShopPage';
-import { MarketPage } from './pages/MarketPage';
-import { ProfilePage } from './pages/ProfilePage';
-import { NotFoundPage } from './pages/NotFoundPage';
-import { WalletBridgePage } from './pages/WalletBridgePage';
+
+function LegacyOpsRedirect() {
+  return <Navigate to="/admin" replace />;
+}
 
 const routes = [
   {
     path: '/wallet-bridge',
-    Component: WalletBridgePage,
+    lazy: async () => ({ Component: (await import('./pages/WalletBridgePage')).WalletBridgePage }),
     errorElement: <AppErrorPage />,
   },
   {
@@ -21,11 +20,14 @@ const routes = [
     errorElement: <AppErrorPage />,
     children: [
       { index: true, Component: AuthAwareHomeRedirect },
-      { path: 'forum', Component: ForumPage },
-      { path: 'shop', Component: ShopPage },
-      { path: 'market', Component: MarketPage },
-      { path: 'profile', Component: ProfilePage },
-      { path: '*', Component: NotFoundPage },
+      { path: 'home', lazy: async () => ({ Component: (await import('./pages/HomePage')).HomePage }) },
+      { path: 'forum', lazy: async () => ({ Component: (await import('./pages/ForumPage')).ForumPage }) },
+      { path: 'shop', lazy: async () => ({ Component: (await import('./pages/ShopPage')).ShopPage }) },
+      { path: 'market', lazy: async () => ({ Component: (await import('./pages/MarketPage')).MarketPage }) },
+      { path: 'profile', lazy: async () => ({ Component: (await import('./pages/ProfilePage')).ProfilePage }) },
+      { path: 'admin', Component: AdminRoute },
+      { path: 'ops', Component: LegacyOpsRedirect },
+      { path: '*', lazy: async () => ({ Component: (await import('./pages/NotFoundPage')).NotFoundPage }) },
     ],
   },
 ];

@@ -469,6 +469,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "duan_market"
+version = "0.1.0"
+dependencies = [
+ "anchor-lang",
+]
+
+[[package]]
 name = "duan_shop"
 version = "0.1.0"
 dependencies = [

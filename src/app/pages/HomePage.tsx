@@ -1,12 +1,16 @@
 import { Link } from 'react-router';
 import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { ArrowRight, MessageSquare, Shield, ShoppingBag, Sparkles, Store, TrendingUp, User } from 'lucide-react';
+import { ArrowRight, Coins, MessageSquare, Shield, ShoppingBag, Sparkles, Store, TrendingUp, User, Wallet } from 'lucide-react';
+import { useConnection } from '@solana/wallet-adapter-react';
 import { Button } from '../components/ui/button';
+import { MaintenanceStateCard } from '../components/ModuleStateCard';
 import { GlassCard } from '../components/GlassCard';
 import { useLanguage } from '../contexts/LanguageContext';
 import { pageDataCache } from '../lib/pageDataCache';
+import { reportError } from '../lib/telemetry';
 import { api } from '../services/api';
+import { fetchOnchainShopSnapshot } from '../lib/onchain/duanShopClient';
 
 interface PlatformStats {
   activeUsers: number;
@@ -14,10 +18,38 @@ interface PlatformStats {
   completedTrades: number;
 }
 
+interface HomeTokenInfo {
+  symbol: string;
+  name: string;
+  price: number;
+  totalSupply: number;
+  circulatingSupply: number;
+  lastUpdated: string;
+}
+
+interface HomeRuntimeState {
+  cluster: string;
+  rpcReachable: boolean;
+  programDeployed: boolean;
+  shopConfigInitialized: boolean;
+}
+
+interface HomeCatalogState {
+  itemCount: number;
+  status: string;
+  code: string;
+  missingItemIds: string[];
+}
+
 export function HomePage() {
-  const { t } = useLanguage();
+  const { connection } = useConnection();
+  const { t, language } = useLanguage();
   const [stats, setStats] = useState<PlatformStats>(() => pageDataCache.home.stats ?? { activeUsers: 0, totalItems: 0, completedTrades: 0 });
+  const [tokenInfo, setTokenInfo] = useState<HomeTokenInfo | null>(() => pageDataCache.home.tokenInfo);
+  const [runtimeState, setRuntimeState] = useState<HomeRuntimeState | null>(() => pageDataCache.home.runtime);
+  const [catalogState, setCatalogState] = useState<HomeCatalogState | null>(() => pageDataCache.home.onchainCatalog);
   const [loading, setLoading] = useState(() => pageDataCache.home.stats === null);
+  const [statsError, setStatsError] = useState<string | null>(null);
 
   useEffect(() => {
     const loadStats = async (options?: { silent?: boolean }) => {
@@ -26,19 +58,53 @@ export function HomePage() {
       }
 
       try {
-        const response = await api.getPlatformStats();
-        if (response.success && response.data) {
+        const [statsResponse, tokenResponse, healthResponse, snapshot] = await Promise.all([
+          api.getPlatformStats(),
+          api.getTokenInfo(),
+          api.getHealth(),
+          fetchOnchainShopSnapshot(connection),
+        ]);
+
+        if (statsResponse.success && statsResponse.data) {
           const nextStats = {
-            activeUsers: response.data.activeUsers,
-            totalItems: response.data.totalItems,
-            completedTrades: response.data.completedTrades,
+            activeUsers: statsResponse.data.activeUsers,
+            totalItems: statsResponse.data.totalItems,
+            completedTrades: statsResponse.data.completedTrades,
           };
           setStats(nextStats);
           pageDataCache.home.stats = nextStats;
-          pageDataCache.home.lastUpdatedAt = Date.now();
         }
+
+        if (tokenResponse.success && tokenResponse.data) {
+          setTokenInfo(tokenResponse.data);
+          pageDataCache.home.tokenInfo = tokenResponse.data;
+        }
+
+        if (healthResponse.success && healthResponse.data) {
+          const nextRuntime = {
+            cluster: healthResponse.data.solana.cluster,
+            rpcReachable: healthResponse.data.solana.rpcReachable,
+            programDeployed: healthResponse.data.solana.programDeployed,
+            shopConfigInitialized: healthResponse.data.solana.shopConfigInitialized,
+          };
+          setRuntimeState(nextRuntime);
+          pageDataCache.home.runtime = nextRuntime;
+        }
+
+        const nextCatalog = {
+          itemCount: snapshot.items.length,
+          status: snapshot.status,
+          code: snapshot.code,
+          missingItemIds: snapshot.missingItemIds,
+        };
+        setCatalogState(nextCatalog);
+        pageDataCache.home.onchainCatalog = nextCatalog;
+
+        setStatsError(null);
+        pageDataCache.home.lastUpdatedAt = Date.now();
       } catch (error) {
-        console.error('Error loading platform stats:', error);
+        reportError('home:platform-stats', error, 'Platform istatistikleri yuklenemedi');
+        setStatsError(error instanceof Error ? error.message : t('common.error'));
       } finally {
         if (!options?.silent) {
           setLoading(false);
@@ -53,7 +119,7 @@ export function HomePage() {
     }, 30000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [connection, t]);
 
   const sections = [
     {
@@ -90,17 +156,21 @@ export function HomePage() {
     {
       icon: TrendingUp,
       title: t('home.liveLayer'),
-      description: t('home.liveLayerDesc'),
+      description: runtimeState?.rpcReachable ? t('home.liveLayerDesc') : t('home.runtimeLimited'),
     },
     {
       icon: Sparkles,
       title: t('home.economyTitle'),
-      description: t('home.economyDesc'),
+      description: tokenInfo
+        ? `${t('home.tokenPrice')}: ${tokenInfo.price} SOL • ${t('home.circulatingSupply')}: ${tokenInfo.circulatingSupply.toLocaleString(language === 'tr' ? 'tr-TR' : 'en-US')}`
+        : t('home.economyDesc'),
     },
     {
       icon: Shield,
       title: t('home.identityTitle'),
-      description: t('home.identityDesc'),
+      description: catalogState
+        ? `${t('home.catalogStatus')}: ${catalogState.status} • ${t('home.catalogItems')}: ${catalogState.itemCount}`
+        : t('home.identityDesc'),
     },
   ];
 
@@ -108,6 +178,28 @@ export function HomePage() {
     { label: t('home.activeUsers'), value: stats.activeUsers, icon: User },
     { label: t('home.totalItems'), value: stats.totalItems, icon: ShoppingBag },
     { label: t('home.completedTrades'), value: stats.completedTrades, icon: TrendingUp },
+    { label: t('home.catalogItems'), value: catalogState?.itemCount ?? 0, icon: Store },
+  ];
+
+  const runtimeCards = [
+    {
+      label: t('home.networkRuntime'),
+      value: runtimeState?.cluster ?? 'devnet',
+      detail: runtimeState?.rpcReachable ? t('home.runtimeHealthy') : t('home.runtimeLimited'),
+      icon: Shield,
+    },
+    {
+      label: t('home.tokenPrice'),
+      value: tokenInfo ? `${tokenInfo.price} SOL` : '--',
+      detail: tokenInfo?.name ?? 'DUAN',
+      icon: Coins,
+    },
+    {
+      label: t('home.circulatingSupply'),
+      value: tokenInfo ? tokenInfo.circulatingSupply.toLocaleString(language === 'tr' ? 'tr-TR' : 'en-US') : '--',
+      detail: t('home.economyDesc'),
+      icon: Wallet,
+    },
   ];
 
   return (
@@ -189,24 +281,47 @@ export function HomePage() {
       </section>
 
       <section className="container mx-auto px-4 py-6 md:py-10">
-        <div className="grid gap-4 md:grid-cols-3">
-          {statCards.map((stat, index) => (
-            <motion.div
-              key={stat.label}
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.45, delay: 0.2 + index * 0.08 }}
-            >
-              <GlassCard className="p-6">
-                <div className="mb-4 flex items-center justify-between">
-                  <span className="text-sm font-medium text-muted-foreground">{stat.label}</span>
-                  <stat.icon className="h-5 w-5 text-primary" />
-                </div>
-                <div className="text-4xl font-black text-foreground">
-                  {loading ? '...' : stat.value.toLocaleString()}
-                </div>
-              </GlassCard>
-            </motion.div>
+        {statsError && !loading ? (
+          <MaintenanceStateCard
+            title={t('home.serviceLimitedTitle')}
+            description={statsError}
+            onAction={() => window.location.reload()}
+          />
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {statCards.map((stat, index) => (
+              <motion.div
+                key={stat.label}
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.45, delay: 0.2 + index * 0.08 }}
+              >
+                <GlassCard className="p-6">
+                  <div className="mb-4 flex items-center justify-between">
+                    <span className="text-sm font-medium text-muted-foreground">{stat.label}</span>
+                    <stat.icon className="h-5 w-5 text-primary" />
+                  </div>
+                  <div className="text-4xl font-black text-foreground">
+                    {loading ? '...' : stat.value.toLocaleString(language === 'tr' ? 'tr-TR' : 'en-US')}
+                  </div>
+                </GlassCard>
+              </motion.div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="container mx-auto px-4 py-6 md:py-10">
+        <div className="grid gap-4 lg:grid-cols-3">
+          {runtimeCards.map((card) => (
+            <GlassCard key={card.label} className="p-6">
+              <div className="mb-4 flex items-center justify-between">
+                <span className="text-sm font-medium text-muted-foreground">{card.label}</span>
+                <card.icon className="h-5 w-5 text-primary" />
+              </div>
+              <div className="text-2xl font-black text-foreground">{card.value}</div>
+              <p className="mt-2 text-sm text-muted-foreground">{card.detail}</p>
+            </GlassCard>
           ))}
         </div>
       </section>
@@ -244,7 +359,7 @@ export function HomePage() {
                 {t('home.ctaTitle')}
               </p>
               <h2 className="mb-4 text-3xl font-bold">{t('home.liveLayer')}</h2>
-              <p className="max-w-2xl text-muted-foreground">{t('home.ctaDesc')}</p>
+              <p className="max-w-2xl text-muted-foreground">{t('home.updatedSummary')}</p>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row lg:flex-col">
               <Link to="/profile">

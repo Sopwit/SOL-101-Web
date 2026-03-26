@@ -2,7 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { Wallet, Sparkles, Edit2, Save, Trophy, TrendingUp, Package, Palette, Brush } from 'lucide-react';
 import { GlassCard } from '../components/GlassCard';
+import { NotificationRail } from '../components/NotificationRail';
+import { PageHero } from '../components/PageHero';
+import { PageShell } from '../components/PageShell';
 import { RarityBadge } from '../components/RarityBadge';
+import { ImageWithFallback } from '../components/figma/ImageWithFallback';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Textarea } from '../components/ui/textarea';
@@ -12,12 +16,17 @@ import { createWalletAuth } from '../lib/walletAuth';
 import { resolveAssetUrl } from '../lib/assetUrls';
 import { useStore } from '../store';
 import { fetchOnchainOwnedItems, fetchOnchainPlayerProfile } from '../lib/onchain/duanShopClient';
+import { useAdminAccess } from '../hooks/useAdminAccess';
+import { useRuntimeHealthStatus } from '../hooks/useRuntimeHealthStatus';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { toast } from 'sonner';
 import { api } from '../services/api';
 import { useLanguage } from '../contexts/LanguageContext';
 import { pageDataCache } from '../lib/pageDataCache';
-import type { InventoryItem, User } from '../types';
+import { reportError } from '../lib/telemetry';
+import { ContentGridSkeleton } from '../components/ContentGridSkeleton';
+import { EmptyStateCard, LoadingStateCard, MaintenanceStateCard } from '../components/ModuleStateCard';
+import type { InventoryItem, SystemStatusItem, User } from '../types';
 import { duanToSol, formatDuanAmount, formatSolAmount } from '../../../shared/duanEconomy';
 import {
   PROFILE_AVATAR_OPTIONS,
@@ -60,8 +69,10 @@ export function ProfilePage() {
   const { connection } = useConnection();
   const wallet = useWallet();
   const { connected, publicKey, signMessage } = wallet;
+  const { isAdmin } = useAdminAccess();
   const { t } = useLanguage();
   const { solBalance, tokenBalance } = useStore();
+  const { statusItem: runtimeStatusItem } = useRuntimeHealthStatus({ requireAuthority: true });
   const walletAddress = publicKey?.toBase58() || '';
   const cachedProfile = pageDataCache.profile.walletAddress === walletAddress ? pageDataCache.profile.profile : null;
   const cachedStats = pageDataCache.profile.walletAddress === walletAddress ? pageDataCache.profile.stats : null;
@@ -73,6 +84,14 @@ export function ProfilePage() {
   const [stats, setStats] = useState<ProfileStats | null>(cachedStats);
   const [inventory, setInventory] = useState<InventoryItem[]>(cachedInventory);
   const [loading, setLoading] = useState(() => connected && publicKey ? cachedProfile === null : false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [profileSourceErrors, setProfileSourceErrors] = useState({
+    backendProfile: null as string | null,
+    backendStats: null as string | null,
+    onchainInventory: null as string | null,
+    onchainProfile: null as string | null,
+  });
+  const [statusCheckedAt, setStatusCheckedAt] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [unlockingId, setUnlockingId] = useState<string | null>(null);
   const loadRequestIdRef = useRef(0);
@@ -83,6 +102,7 @@ export function ProfilePage() {
 
     setLoading(true);
     try {
+      setLoadError(null);
       const [statsResponse, profileResponse, onchainInventory, onchainProfile] = await Promise.all([
         api.getProfileStats(walletAddress),
         api.getProfile(walletAddress),
@@ -91,6 +111,17 @@ export function ProfilePage() {
       ]);
 
       if (requestId !== loadRequestIdRef.current) return;
+
+      const profileNotInitializedMessage = onchainProfile.exists
+        ? null
+        : 'On-chain player profile henuz olusmamis. Devnet akisi icin bu normal; ilk satin alim veya oyun sync sonrasi otomatik olusur.';
+
+      setProfileSourceErrors({
+        backendProfile: profileResponse.success ? null : (profileResponse.error || 'Backend profil kaydi alinamadi.'),
+        backendStats: statsResponse.success ? null : (statsResponse.error || 'Backend profil istatistikleri alinamadi.'),
+        onchainInventory: null,
+        onchainProfile: profileNotInitializedMessage,
+      });
 
       if (profileResponse.success && profileResponse.data) {
         setProfile(profileResponse.data);
@@ -103,13 +134,13 @@ export function ProfilePage() {
       if (statsResponse.success && statsResponse.data) {
         const nextStats = {
           ...statsResponse.data,
-          totalItems: onchainProfile?.totalItems ?? statsResponse.data.totalItems,
-          totalTrades: onchainProfile?.totalTrades ?? statsResponse.data.totalTrades,
+          totalItems: onchainProfile.exists ? onchainProfile.totalItems : statsResponse.data.totalItems,
+          totalTrades: onchainProfile.exists ? onchainProfile.totalTrades : statsResponse.data.totalTrades,
         };
         setStats(nextStats);
         pageDataCache.profile.walletAddress = walletAddress;
         pageDataCache.profile.stats = nextStats;
-      } else if (onchainProfile) {
+      } else if (onchainProfile.exists) {
         const nextStats = {
           level: 1,
           xp: 0,
@@ -133,10 +164,21 @@ export function ProfilePage() {
       pageDataCache.profile.walletAddress = walletAddress;
       pageDataCache.profile.inventory = nextInventory;
     } catch (error) {
-      console.error('Error loading profile:', error);
+      reportError('profile:load', error, 'Profil yuklenemedi');
+      const message = error instanceof Error ? error.message : t('common.error');
+      setLoadError(message);
+      setProfileSourceErrors((current) => ({
+        ...current,
+        onchainInventory: message,
+      }));
     } finally {
       if (requestId === loadRequestIdRef.current) {
         setLoading(false);
+        setStatusCheckedAt(new Date().toLocaleTimeString('tr-TR', {
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+        }));
       }
     }
   };
@@ -186,7 +228,7 @@ export function ProfilePage() {
         toast.error(response.error || t('common.error'));
       }
     } catch (error) {
-      console.error('Error saving profile:', error);
+      reportError('profile:save', error, 'Profil kaydi basarisiz');
       toast.error(t('common.error'));
     } finally {
       setIsSaving(false);
@@ -210,7 +252,7 @@ export function ProfilePage() {
       await loadProfileData();
       toast.success(t('common.success'));
     } catch (error) {
-      console.error('Error unlocking cosmetic:', error);
+      reportError('profile:unlock-cosmetic', error, 'Kozmetik acma istegi basarisiz');
       toast.error(t('common.error'));
     } finally {
       setUnlockingId(null);
@@ -219,13 +261,12 @@ export function ProfilePage() {
 
   if (!connected) {
     return (
-      <div className="container mx-auto px-4 py-20">
-        <GlassCard className="p-12 text-center">
-          <Wallet className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
-          <h2 className="text-2xl font-bold mb-2">{t('profile.walletRequired')}</h2>
-          <p className="text-muted-foreground mb-6">{t('profile.walletRequiredDesc')}</p>
-          <Button>{t('profile.connectWallet')}</Button>
-        </GlassCard>
+      <div className="container mx-auto px-4 py-24 md:px-6">
+        <EmptyStateCard
+          title={t('profile.walletRequired')}
+          description={t('profile.walletRequiredDesc')}
+          icon={Wallet}
+        />
       </div>
     );
   }
@@ -257,15 +298,108 @@ export function ProfilePage() {
     },
   ];
 
+  const profileStatuses: SystemStatusItem[] = [
+    {
+      id: 'profile-backend-profile',
+      source: 'backend',
+      state: profileSourceErrors.backendProfile ? 'degraded' : 'healthy',
+      severity: profileSourceErrors.backendProfile ? 'warning' : 'info',
+      title: 'Backend Profile',
+      detail: profileSourceErrors.backendProfile || 'Kullanici adi, bio ve kozmetik secimleri backend profilinden yukleniyor.',
+      checkedAt: statusCheckedAt || undefined,
+      context: profile?.username ? 'Profil kaydi hazir' : 'Varsayilan profil',
+    },
+    {
+      id: 'profile-backend-stats',
+      source: 'backend',
+      state: profileSourceErrors.backendStats ? 'degraded' : 'healthy',
+      severity: profileSourceErrors.backendStats ? 'warning' : 'info',
+      title: 'Backend Stats',
+      detail: profileSourceErrors.backendStats || 'Reward ve sosyal istatistikler backend uzerinden aliniyor.',
+      checkedAt: statusCheckedAt || undefined,
+    },
+    {
+      ...runtimeStatusItem,
+      id: 'profile-backend-sync',
+      title: 'Backend Game Sync',
+      detail: runtimeStatusItem.state === 'healthy'
+        ? 'Backend runtime game authority ile player-profile sync yazimi icin hazir.'
+        : runtimeStatusItem.detail,
+    },
+    {
+      id: 'profile-onchain-layer',
+      source: 'onchain',
+      state: profileSourceErrors.onchainInventory ? 'degraded' : 'healthy',
+      severity: profileSourceErrors.onchainInventory ? 'warning' : 'info',
+      title: 'On-Chain Progression',
+      detail: profileSourceErrors.onchainInventory || profileSourceErrors.onchainProfile || 'Inventory ve player progression on-chain hesaptan okunuyor.',
+      checkedAt: statusCheckedAt || undefined,
+      context: profileSourceErrors.onchainInventory ? connection.rpcEndpoint.replace(/^https?:\/\//, '') : `${totalInventoryCount} item / ${stats?.level ?? 1}. seviye`,
+    },
+  ];
+
+  if (loading && !profile && !stats && inventory.length === 0) {
+    return (
+      <>
+        <PageShell
+          hero={(
+            <PageHero
+              eyebrow="PLAYER PROFILE"
+              title={shortAddress}
+              description={t('profile.walletRequiredDesc')}
+              accent="from-fuchsia-400/15 via-pink-300/10 to-rose-300/15"
+              panelTitle="ACCOUNT SNAPSHOT"
+              panelBody="Kimlik, kozmetik secimleri ve on-chain inventory tek panelde toplanir."
+              metrics={[
+                { label: 'SOL', value: solBalance.toFixed(2) },
+                { label: 'DUAN', value: `${Math.round(tokenBalance)}` },
+                { label: 'Items', value: '...' },
+              ]}
+            />
+          )}
+        >
+          <LoadingStateCard
+            title="Profil verileri hazirlaniyor"
+            description="Backend profil, reward istatistikleri ve on-chain inventory birlestiriliyor."
+          />
+          <ContentGridSkeleton count={3} imageClassName="h-28" contentLines={4} />
+        </PageShell>
+        <NotificationRail
+          title="Profil Durum Merkezi"
+          description="Burada profil modulu icin backend ve on-chain katmanlarin saglik durumunu gorebilirsin."
+          triggerLabel="Profile Status"
+          items={profileStatuses}
+        />
+      </>
+    );
+  }
+
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="relative mb-8">
+    <>
+      <PageShell
+        hero={(
+          <PageHero
+            eyebrow="PLAYER PROFILE"
+            title={profile?.username || shortAddress}
+            description={profile?.bio || t('profile.walletRequiredDesc')}
+            accent="from-fuchsia-400/15 via-pink-300/10 to-rose-300/15"
+            panelTitle="ACCOUNT SNAPSHOT"
+            panelBody="Kimlik, kozmetik secimleri ve on-chain inventory tek panelde toplanir."
+            metrics={[
+              { label: 'SOL', value: solBalance.toFixed(2) },
+              { label: 'DUAN', value: `${Math.round(tokenBalance)}` },
+              { label: 'Items', value: `${totalInventoryCount}` },
+            ]}
+          />
+        )}
+      >
+      <div className="relative">
         <div className="h-48 rounded-2xl relative overflow-hidden" style={{ background: selectedBackground.gradient }}>
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.24),transparent_35%),linear-gradient(180deg,rgba(15,23,42,0.08),rgba(15,23,42,0.28))]" />
         </div>
 
-        <div className="relative px-6 -mt-16">
-          <GlassCard className="p-6">
+        <div className="relative -mt-16 px-4 md:px-6">
+          <GlassCard className="p-6 md:p-7">
             <div className="flex flex-col md:flex-row items-start gap-6">
               <div className="relative">
                 <div
@@ -327,15 +461,15 @@ export function ProfilePage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
-              <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg">
+            <div className="mt-8 grid grid-cols-1 gap-4 xl:grid-cols-3">
+              <div className="flex items-center justify-between rounded-2xl bg-muted/30 p-5">
                 <div className="flex items-center gap-2">
                   <Wallet className="w-5 h-5 text-primary" />
                   <span className="font-medium">SOL {t('wallet.balance')}</span>
                 </div>
                 <span className="text-xl font-bold">{solBalance.toFixed(4)}</span>
               </div>
-              <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg">
+              <div className="flex items-center justify-between rounded-2xl bg-muted/30 p-5">
                 <div className="flex items-center gap-2">
                   <Sparkles className="w-5 h-5 text-secondary" />
                   <span className="font-medium">DUAN {t('wallet.balance')}</span>
@@ -345,7 +479,7 @@ export function ProfilePage() {
                   <div className="text-xs text-muted-foreground">{formatSolAmount(duanToSol(tokenBalance))}</div>
                 </div>
               </div>
-              <div className="p-4 bg-muted/30 rounded-lg">
+              <div className="rounded-2xl bg-muted/30 p-5">
                 <div className="flex items-center gap-2 mb-3">
                   <Trophy className="w-5 h-5 text-secondary" />
                   <span className="font-medium">{t('profile.rewardVault')}</span>
@@ -362,23 +496,23 @@ export function ProfilePage() {
             </div>
 
             {stats && (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
-                <div className="text-center p-4 bg-gradient-to-br from-primary/10 to-primary/5 rounded-lg">
+              <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-2xl bg-gradient-to-br from-primary/10 to-primary/5 p-5 text-center">
                   <TrendingUp className="w-6 h-6 text-primary mx-auto mb-2" />
                   <div className="text-2xl font-bold">{stats.level}</div>
                   <div className="text-xs text-muted-foreground">{t('profile.level')}</div>
                 </div>
-                <div className="text-center p-4 bg-gradient-to-br from-blue-500/10 to-blue-500/5 rounded-lg">
+                <div className="rounded-2xl bg-gradient-to-br from-blue-500/10 to-blue-500/5 p-5 text-center">
                   <Package className="w-6 h-6 text-blue-500 mx-auto mb-2" />
                   <div className="text-2xl font-bold">{Math.max(stats.totalItems, totalInventoryCount)}</div>
                   <div className="text-xs text-muted-foreground">{t('profile.items')}</div>
                 </div>
-                <div className="text-center p-4 bg-gradient-to-br from-secondary/10 to-secondary/5 rounded-lg">
+                <div className="rounded-2xl bg-gradient-to-br from-secondary/10 to-secondary/5 p-5 text-center">
                   <Trophy className="w-6 h-6 text-secondary mx-auto mb-2" />
                   <div className="text-2xl font-bold">{stats.achievements.length}</div>
                   <div className="text-xs text-muted-foreground">{t('profile.achievements')}</div>
                 </div>
-                <div className="text-center p-4 bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 rounded-lg">
+                <div className="rounded-2xl bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 p-5 text-center">
                   <Sparkles className="w-6 h-6 text-emerald-500 mx-auto mb-2" />
                   <div className="text-2xl font-bold">{stats.totalTrades}</div>
                   <div className="text-xs text-muted-foreground">{t('profile.trades')}</div>
@@ -389,7 +523,7 @@ export function ProfilePage() {
         </div>
       </div>
 
-      <GlassCard className="p-6 mb-6">
+      <GlassCard className="p-6 md:p-7">
         <div className="flex items-center gap-2 mb-4">
           <Palette className="w-5 h-5 text-primary" />
           <h2 className="text-xl font-bold">{t('profile.cosmetics')}</h2>
@@ -403,7 +537,7 @@ export function ProfilePage() {
                   <SectionIcon className="w-4 h-4 text-muted-foreground" />
                   <h3 className="font-semibold">{section.title}</h3>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   {section.options.map((option) => {
                     const owned = section.ownedIds.has(option.id);
                     const selected = section.selectedId === option.id;
@@ -416,8 +550,8 @@ export function ProfilePage() {
                           : t('profile.unlockWithSol');
 
                     return (
-                      <div key={option.id} className="rounded-xl border border-border/60 p-4 bg-background/60">
-                        <div className="rounded-lg h-24 mb-3 flex items-center justify-center text-white text-2xl font-bold" style={{ background: option.gradient }}>
+                      <div key={option.id} className="rounded-[1.35rem] border border-border/60 bg-background/60 p-4">
+                        <div className="mb-4 flex h-24 items-center justify-center rounded-2xl text-2xl font-bold text-white" style={{ background: option.gradient }}>
                           {'symbol' in option ? option.symbol : option.name}
                         </div>
                         <div className="flex items-start justify-between gap-3">
@@ -452,7 +586,7 @@ export function ProfilePage() {
 
         <TabsContent value="inventory" className="space-y-4">
           {inventory.length > 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
               {inventory.map((inv, index) => (
                 <motion.div
                   key={inv.id}
@@ -460,9 +594,9 @@ export function ProfilePage() {
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ delay: index * 0.05, duration: 0.3 }}
                 >
-                  <GlassCard hover className="overflow-hidden group">
+                  <GlassCard hover className="group overflow-hidden">
                     <div className="aspect-square overflow-hidden relative">
-                      <img src={resolveAssetUrl(inv.item.imageUrl)} alt={inv.item.name} className="w-full h-full object-cover transition-transform group-hover:scale-110" />
+                      <ImageWithFallback src={resolveAssetUrl(inv.item.imageUrl)} alt={inv.item.name} className="w-full h-full object-cover transition-transform group-hover:scale-110" />
                     </div>
                     <div className="p-4">
                       <div className="flex items-center justify-between gap-2 mb-2">
@@ -477,17 +611,25 @@ export function ProfilePage() {
               ))}
             </div>
           ) : (
-            <GlassCard className="p-12 text-center">
-              <Package className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
-              <h3 className="text-xl font-bold mb-2">{t('profile.inventory')}</h3>
-              <p className="text-muted-foreground">{loading ? t('common.loading') : t('profile.noInventory')}</p>
-            </GlassCard>
+            loadError ? (
+              <MaintenanceStateCard
+                title={t('profile.inventory')}
+                description={loadError}
+                onAction={() => { void loadProfileData(); }}
+              />
+            ) : (
+              <EmptyStateCard
+                title={t('profile.inventory')}
+                description={loading ? t('common.loading') : t('profile.noInventory')}
+                icon={Package}
+              />
+            )
           )}
         </TabsContent>
 
         <TabsContent value="achievements" className="space-y-4">
           {stats && stats.achievements.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
               {stats.achievements.map((achievement, index) => (
                 <motion.div
                   key={achievement.id}
@@ -495,7 +637,7 @@ export function ProfilePage() {
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: index * 0.05, duration: 0.3 }}
                 >
-                  <GlassCard hover className="p-4">
+                  <GlassCard hover className="p-5">
                     <div className="flex items-start gap-4">
                       <div className="text-4xl">{achievement.icon}</div>
                       <div className="flex-1">
@@ -523,6 +665,15 @@ export function ProfilePage() {
           )}
         </TabsContent>
       </Tabs>
-    </div>
+      </PageShell>
+      {isAdmin ? (
+        <NotificationRail
+          title="Profil Durum Merkezi"
+          description="Burada profil modulu icin backend ve on-chain katmanlarin saglik durumunu gorebilirsin."
+          triggerLabel="Profile Status"
+          items={profileStatuses}
+        />
+      ) : null}
+    </>
   );
 }

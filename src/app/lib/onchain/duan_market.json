@@ -1,0 +1,826 @@
+{
+  "address": "9C7JgT4r9D4K1wVtwJAnYXhYzu3PV6PvJEa3TBUnVJWM",
+  "metadata": {
+    "name": "duan_market",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "On-chain market listing and trade intent state machine for DUAN"
+  },
+  "instructions": [
+    {
+      "name": "accept_trade_intent",
+      "discriminator": [
+        135,
+        60,
+        178,
+        236,
+        32,
+        139,
+        174,
+        161
+      ],
+      "accounts": [
+        {
+          "name": "market_config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  114,
+                  107,
+                  101,
+                  116,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "listing_escrow",
+          "writable": true
+        },
+        {
+          "name": "market",
+          "relations": [
+            "listing_escrow"
+          ]
+        },
+        {
+          "name": "trade_intent",
+          "writable": true
+        },
+        {
+          "name": "listing",
+          "relations": [
+            "trade_intent"
+          ]
+        },
+        {
+          "name": "seller",
+          "signer": true,
+          "relations": [
+            "listing_escrow"
+          ]
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "cancel_listing_escrow",
+      "discriminator": [
+        89,
+        113,
+        45,
+        141,
+        226,
+        212,
+        140,
+        253
+      ],
+      "accounts": [
+        {
+          "name": "market_config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  114,
+                  107,
+                  101,
+                  116,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "listing_escrow",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  105,
+                  115,
+                  116,
+                  105,
+                  110,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "seller"
+              },
+              {
+                "kind": "account",
+                "path": "listing_escrow.listing_nonce",
+                "account": "ListingEscrow"
+              }
+            ]
+          }
+        },
+        {
+          "name": "market",
+          "relations": [
+            "listing_escrow"
+          ]
+        },
+        {
+          "name": "seller",
+          "signer": true,
+          "relations": [
+            "listing_escrow"
+          ]
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "create_trade_intent",
+      "discriminator": [
+        133,
+        17,
+        117,
+        11,
+        86,
+        188,
+        103,
+        142
+      ],
+      "accounts": [
+        {
+          "name": "market_config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  114,
+                  107,
+                  101,
+                  116,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "listing_escrow",
+          "writable": true
+        },
+        {
+          "name": "market",
+          "relations": [
+            "listing_escrow"
+          ]
+        },
+        {
+          "name": "trade_intent",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  114,
+                  97,
+                  100,
+                  101,
+                  45,
+                  105,
+                  110,
+                  116,
+                  101,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "listing_escrow"
+              },
+              {
+                "kind": "account",
+                "path": "buyer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "buyer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "CreateTradeIntentArgs"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "initialize_market",
+      "discriminator": [
+        35,
+        35,
+        189,
+        193,
+        155,
+        48,
+        170,
+        203
+      ],
+      "accounts": [
+        {
+          "name": "market_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  114,
+                  107,
+                  101,
+                  116,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "duan_shop_program",
+          "type": "pubkey"
+        },
+        {
+          "name": "settlement_authority",
+          "type": "pubkey"
+        },
+        {
+          "name": "fee_bps",
+          "type": "u16"
+        }
+      ]
+    },
+    {
+      "name": "open_listing_escrow",
+      "discriminator": [
+        217,
+        172,
+        180,
+        124,
+        30,
+        57,
+        50,
+        15
+      ],
+      "accounts": [
+        {
+          "name": "market_config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  114,
+                  107,
+                  101,
+                  116,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "listing_escrow",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  105,
+                  115,
+                  116,
+                  105,
+                  110,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "seller"
+              },
+              {
+                "kind": "arg",
+                "path": "args.listing_nonce"
+              }
+            ]
+          }
+        },
+        {
+          "name": "seller",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "OpenListingArgs"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "ListingEscrow",
+      "discriminator": [
+        102,
+        75,
+        45,
+        149,
+        126,
+        109,
+        249,
+        170
+      ]
+    },
+    {
+      "name": "MarketConfig",
+      "discriminator": [
+        119,
+        255,
+        200,
+        88,
+        252,
+        82,
+        128,
+        24
+      ]
+    },
+    {
+      "name": "TradeIntent",
+      "discriminator": [
+        245,
+        187,
+        15,
+        112,
+        10,
+        112,
+        37,
+        229
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "ListingCancelledEvent",
+      "discriminator": [
+        203,
+        204,
+        24,
+        205,
+        33,
+        24,
+        151,
+        195
+      ]
+    },
+    {
+      "name": "ListingOpenedEvent",
+      "discriminator": [
+        17,
+        191,
+        80,
+        144,
+        51,
+        202,
+        62,
+        103
+      ]
+    },
+    {
+      "name": "TradeIntentAcceptedEvent",
+      "discriminator": [
+        147,
+        171,
+        229,
+        103,
+        25,
+        8,
+        40,
+        66
+      ]
+    },
+    {
+      "name": "TradeIntentCreatedEvent",
+      "discriminator": [
+        113,
+        137,
+        11,
+        217,
+        208,
+        167,
+        177,
+        201
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "ItemIdTooLong",
+      "msg": "Item id is too long."
+    },
+    {
+      "code": 6001,
+      "name": "InvalidExpiry",
+      "msg": "Listing expiry must be in the future."
+    },
+    {
+      "code": 6002,
+      "name": "FeeTooHigh",
+      "msg": "Fee bps is too high."
+    },
+    {
+      "code": 6003,
+      "name": "ListingNotOpen",
+      "msg": "Listing is not open."
+    },
+    {
+      "code": 6004,
+      "name": "ListingExpired",
+      "msg": "Listing has expired."
+    },
+    {
+      "code": 6005,
+      "name": "TradeIntentNotOpen",
+      "msg": "Trade intent is not open."
+    },
+    {
+      "code": 6006,
+      "name": "SelfTradeBlocked",
+      "msg": "Seller and buyer cannot be the same wallet."
+    },
+    {
+      "code": 6007,
+      "name": "TradeIntentListingMismatch",
+      "msg": "Trade intent does not belong to this listing."
+    }
+  ],
+  "types": [
+    {
+      "name": "CreateTradeIntentArgs",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "offered_amount",
+            "type": "u64"
+          },
+          {
+            "name": "offered_item_id",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ListingCancelledEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "listing",
+            "type": "pubkey"
+          },
+          {
+            "name": "seller",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ListingEscrow",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market",
+            "type": "pubkey"
+          },
+          {
+            "name": "seller",
+            "type": "pubkey"
+          },
+          {
+            "name": "item_id",
+            "type": "string"
+          },
+          {
+            "name": "wanted_type",
+            "type": "u8"
+          },
+          {
+            "name": "wanted_amount",
+            "type": "u64"
+          },
+          {
+            "name": "wanted_item_id",
+            "type": "string"
+          },
+          {
+            "name": "status",
+            "type": "u8"
+          },
+          {
+            "name": "created_at",
+            "type": "i64"
+          },
+          {
+            "name": "expires_at",
+            "type": "i64"
+          },
+          {
+            "name": "listing_nonce",
+            "type": "u64"
+          },
+          {
+            "name": "accepted_trade",
+            "type": "pubkey"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ListingOpenedEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "listing",
+            "type": "pubkey"
+          },
+          {
+            "name": "seller",
+            "type": "pubkey"
+          },
+          {
+            "name": "item_id",
+            "type": "string"
+          },
+          {
+            "name": "wanted_type",
+            "type": "u8"
+          },
+          {
+            "name": "wanted_amount",
+            "type": "u64"
+          },
+          {
+            "name": "wanted_item_id",
+            "type": "string"
+          },
+          {
+            "name": "expires_at",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MarketConfig",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "duan_shop_program",
+            "type": "pubkey"
+          },
+          {
+            "name": "settlement_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "fee_bps",
+            "type": "u16"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "OpenListingArgs",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "item_id",
+            "type": "string"
+          },
+          {
+            "name": "wanted_type",
+            "type": "u8"
+          },
+          {
+            "name": "wanted_amount",
+            "type": "u64"
+          },
+          {
+            "name": "wanted_item_id",
+            "type": "string"
+          },
+          {
+            "name": "expires_at",
+            "type": "i64"
+          },
+          {
+            "name": "listing_nonce",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "TradeIntent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "listing",
+            "type": "pubkey"
+          },
+          {
+            "name": "buyer",
+            "type": "pubkey"
+          },
+          {
+            "name": "offered_amount",
+            "type": "u64"
+          },
+          {
+            "name": "offered_item_id",
+            "type": "string"
+          },
+          {
+            "name": "status",
+            "type": "u8"
+          },
+          {
+            "name": "created_at",
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "TradeIntentAcceptedEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "listing",
+            "type": "pubkey"
+          },
+          {
+            "name": "trade_intent",
+            "type": "pubkey"
+          },
+          {
+            "name": "seller",
+            "type": "pubkey"
+          },
+          {
+            "name": "buyer",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "TradeIntentCreatedEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "listing",
+            "type": "pubkey"
+          },
+          {
+            "name": "trade_intent",
+            "type": "pubkey"
+          },
+          {
+            "name": "buyer",
+            "type": "pubkey"
+          },
+          {
+            "name": "offered_amount",
+            "type": "u64"
+          },
+          {
+            "name": "offered_item_id",
+            "type": "string"
+          }
+        ]
+      }
+    }
+  ]
+}

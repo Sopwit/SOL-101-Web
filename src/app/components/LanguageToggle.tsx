@@ -9,7 +9,7 @@ import {
 import { useLanguage } from '../contexts/LanguageContext';
 
 export function LanguageToggle() {
-  const { language, setLanguage } = useLanguage();
+  const { language, setLanguage, t } = useLanguage();
 
   return (
     <DropdownMenu modal={false}>
@@ -17,9 +17,9 @@ export function LanguageToggle() {
         <Button 
           variant="outline" 
           size="icon"
-          className="relative"
-          title={language === 'tr' ? 'Dil Değiştir' : 'Change Language'}
-          aria-label={language === 'tr' ? 'Dil Değiştir' : 'Change Language'}
+          className="relative border-border/50 bg-background/72"
+          title={t('language.change')}
+          aria-label={t('language.change')}
         >
           <Globe className="h-5 w-5" />
         </Button>
@@ -33,7 +33,7 @@ export function LanguageToggle() {
           className={`cursor-pointer ${language === 'tr' ? 'bg-primary/20 font-medium' : ''}`}
         >
           <span className="mr-2 text-base">🇹🇷</span>
-          <span>Türkçe</span>
+          <span>{t('language.tr')}</span>
         </DropdownMenuItem>
         <DropdownMenuItem
           onClick={(e) => {
@@ -43,7 +43,7 @@ export function LanguageToggle() {
           className={`cursor-pointer ${language === 'en' ? 'bg-primary/20 font-medium' : ''}`}
         >
           <span className="mr-2 text-base">🇬🇧</span>
-          <span>English</span>
+          <span>{t('language.en')}</span>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

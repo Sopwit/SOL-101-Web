@@ -28,7 +28,7 @@ Bu nedenle repo hem "canli entegrasyon" hem de "ileride tamamlanacak UI akislari
 
 ### Shop
 - Token bilgisi backend'den alinabilir
-- Item listeleme ve satin alma akislarinin ana yolu backend endpoint'leri uzerinden ilerler
+- Item listeleme ve satin alma akislarinin ana yolu on-chain shop hesaplari uzerinden ilerler
 - SPL token mint adresi tanimlanirsa wallet token bakiyesi zincirden okunur
 - Token mint adresi yoksa uygulama token bakiyesini `0` gosterir
 
@@ -41,7 +41,7 @@ Bu nedenle repo hem "canli entegrasyon" hem de "ileride tamamlanacak UI akislari
 ### Profil
 - Wallet baglantisi sonrasinda profil ve istatistikler backend'den cekilir
 - Profil guncelleme imzali istek ile backend'e yazilir
-- Envanter sekmesi backend envanteri ile calisir
+- Envanter sekmesi on-chain owned item hesaplari ile calisir
 - Post ve listing sekmeleri sadeleştirilmistir; bu veriler yeniden eklenecekse backend kaynakli tasarlanmalidir
 
 ### Oyun Entegrasyonu
@@ -188,6 +188,9 @@ VITE_SUPABASE_ANON_KEY=your-anon-key
 VITE_SOLANA_CLUSTER=devnet
 VITE_SOLANA_RPC_URL=https://api.devnet.solana.com
 VITE_SOLANA_TOKEN_MINT=your-spl-token-mint-address
+DUAN_SHOP_PROGRAM_ID=your-anchor-program-id
+DUAN_SHOP_TREASURY=your-treasury-wallet-address
+DUAN_SHOP_GAME_AUTHORITY=your-backend-or-unity-authority-wallet-address
 ```
 
 `VITE_SOLANA_RPC_URL` verilmezse uygulama `VITE_SOLANA_CLUSTER` degerine gore RPC endpoint secmeye calisir. O da verilmezse varsayilan `devnet` olur.
@@ -224,6 +227,11 @@ npm run preview
 npm run lint
 npm run format
 npm run validate
+npm run solana:build
+npm run solana:sync-idl
+npm run solana:sync-shop
+npm run solana:set-game-authority
+npm run solana:bootstrap
 ```
 
 ## Backend API Ozet

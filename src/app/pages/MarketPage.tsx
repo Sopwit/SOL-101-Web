@@ -11,9 +11,16 @@ import { createWalletAuth } from '../lib/walletAuth';
 import { resolveAssetUrl } from '../lib/assetUrls';
 import { pageDataCache } from '../lib/pageDataCache';
 import { fetchOnchainOwnedItems } from '../lib/onchain/duanShopClient';
+import { cancelOnchainMarketListing, createOnchainTradeIntent, openOnchainMarketListing } from '../lib/onchain/duanMarketClient';
 import { localizeShopItem } from '../lib/shopItemLocalization';
+import { ContentGridSkeleton } from '../components/ContentGridSkeleton';
 import { GlassCard } from '../components/GlassCard';
+import { EmptyStateCard, LoadingStateCard, MaintenanceStateCard } from '../components/ModuleStateCard';
+import { NotificationRail } from '../components/NotificationRail';
+import { PageHero } from '../components/PageHero';
+import { PageShell } from '../components/PageShell';
 import { RarityBadge } from '../components/RarityBadge';
+import { ImageWithFallback } from '../components/figma/ImageWithFallback';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
@@ -21,12 +28,16 @@ import { Input } from '../components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Textarea } from '../components/ui/textarea';
 import { api } from '../services/api';
-import type { InventoryItem, MarketListing } from '../types';
+import { reportError } from '../lib/telemetry';
+import { useAdminAccess } from '../hooks/useAdminAccess';
+import type { InventoryItem, MarketListing, SystemStatusItem } from '../types';
 import { formatDuanWithSol } from '../../../shared/duanEconomy';
 
 export function MarketPage() {
   const { connection } = useConnection();
-  const { connected, publicKey, signMessage } = useWallet();
+  const wallet = useWallet();
+  const { connected, publicKey, signMessage } = wallet;
+  const { isAdmin } = useAdminAccess();
   const { t, language } = useLanguage();
   const [listings, setListings] = useState<MarketListing[]>(() => pageDataCache.market.listings);
   const [myListings, setMyListings] = useState<MarketListing[]>(() => pageDataCache.market.myListings);
@@ -36,6 +47,9 @@ export function MarketPage() {
   const [isLoading, setIsLoading] = useState(() => pageDataCache.market.listings.length === 0);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
   const [inventoryLoading, setInventoryLoading] = useState(false);
+  const [inventoryError, setInventoryError] = useState<string | null>(null);
+  const [marketFeedError, setMarketFeedError] = useState<string | null>(null);
+  const [statusCheckedAt, setStatusCheckedAt] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<'feed' | 'mine'>('feed');
   const [isCancellingListingId, setIsCancellingListingId] = useState<string | null>(null);
 
@@ -48,6 +62,31 @@ export function MarketPage() {
 
   const walletAddress = publicKey?.toBase58() ?? '';
 
+  const loadInventory = async () => {
+    if (!connected || !publicKey) {
+      setInventoryItems([]);
+      return;
+    }
+
+    setInventoryLoading(true);
+    try {
+      setInventoryError(null);
+      const nextInventory = await fetchOnchainOwnedItems(connection, publicKey);
+      setInventoryItems(nextInventory);
+    } catch (error) {
+      reportError('market:onchain-inventory', error, 'On-chain inventory yuklenemedi');
+      setInventoryItems([]);
+      setInventoryError(error instanceof Error ? error.message : t('common.error'));
+    } finally {
+      setInventoryLoading(false);
+      setStatusCheckedAt(new Date().toLocaleTimeString(language === 'tr' ? 'tr-TR' : 'en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      }));
+    }
+  };
+
   const loadListings = async () => {
     if (pageDataCache.market.listings.length === 0 || pageDataCache.market.language !== language) {
       setIsLoading(true);
@@ -58,6 +97,7 @@ export function MarketPage() {
         connected && walletAddress ? api.getListingsByWallet(walletAddress, language) : Promise.resolve({ success: true, data: [] as MarketListing[] }),
       ]);
 
+      setMarketFeedError(globalResponse.success ? null : (globalResponse.error || 'Market feed backend tarafindan yuklenemedi.'));
       const nextListings = globalResponse.success && globalResponse.data ? globalResponse.data : [];
       const nextMyListings = ownResponse.success && ownResponse.data ? ownResponse.data : [];
       setListings(nextListings);
@@ -67,6 +107,11 @@ export function MarketPage() {
       pageDataCache.market.language = language;
     } finally {
       setIsLoading(false);
+      setStatusCheckedAt(new Date().toLocaleTimeString(language === 'tr' ? 'tr-TR' : 'en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      }));
     }
   };
 
@@ -75,21 +120,6 @@ export function MarketPage() {
   }, [language, connected, walletAddress]);
 
   useEffect(() => {
-    const loadInventory = async () => {
-      if (!connected || !publicKey) {
-        setInventoryItems([]);
-        return;
-      }
-
-      setInventoryLoading(true);
-      try {
-        const nextInventory = await fetchOnchainOwnedItems(connection, publicKey);
-        setInventoryItems(nextInventory);
-      } finally {
-        setInventoryLoading(false);
-      }
-    };
-
     void loadInventory();
   }, [connected, publicKey, connection]);
 
@@ -115,6 +145,39 @@ export function MarketPage() {
     }
     const walletAuth = await createWalletAuth({ publicKey, signMessage }, 'market:create_listing');
     if (!walletAuth) return;
+
+    let onchainPayload: {
+      marketMode: 'backend' | 'hybrid' | 'onchain';
+      onchainListingPda?: string;
+      onchainProgramId?: string;
+      txSignature?: string;
+      expiresAt?: string;
+      listingNonce?: string;
+    };
+
+    try {
+      const onchainResult = await openOnchainMarketListing(connection, wallet, {
+        itemId: offeredItemId,
+        wantedType,
+        wantedTokenAmount: wantedTokenAmount ? Number(wantedTokenAmount) : undefined,
+        wantedItemId: wantedItemName || undefined,
+        durationHours: Number(duration),
+      });
+
+      onchainPayload = {
+        marketMode: 'hybrid',
+        onchainListingPda: onchainResult.listingEscrow,
+        onchainProgramId: onchainResult.programId,
+        txSignature: onchainResult.signature,
+        expiresAt: onchainResult.expiresAt,
+        listingNonce: onchainResult.listingNonce,
+      };
+    } catch (error) {
+      reportError('market:onchain-open-listing', error, 'On-chain market listing acilamadi');
+      toast.error(error instanceof Error ? error.message : 'On-chain market listing acilamadi');
+      return;
+    }
+
     const response = await api.createListing(
       publicKey.toBase58(),
       {
@@ -124,6 +187,7 @@ export function MarketPage() {
         wantedItemName: wantedItemName || undefined,
         note: note || undefined,
         duration: Number(duration),
+        ...onchainPayload,
       },
       walletAuth
     );
@@ -152,7 +216,35 @@ export function MarketPage() {
     }
     const walletAuth = await createWalletAuth({ publicKey, signMessage }, 'market:create_trade');
     if (!walletAuth) return;
-    const response = await api.createTradeOffer(selectedListing.id, publicKey.toBase58(), {}, walletAuth);
+
+    let onchainPayload: {
+      marketMode: 'backend' | 'hybrid' | 'onchain';
+      onchainTradeIntentPda?: string;
+      onchainProgramId?: string;
+      txSignature?: string;
+    } = { marketMode: 'backend' };
+
+    if (selectedListing.onchainListingPda) {
+      try {
+        const onchainResult = await createOnchainTradeIntent(connection, wallet, {
+          listingEscrow: selectedListing.onchainListingPda,
+          offeredTokenAmount: selectedListing.wantedTokenAmount,
+        });
+
+        onchainPayload = {
+          marketMode: 'hybrid',
+          onchainTradeIntentPda: onchainResult.tradeIntent,
+          onchainProgramId: onchainResult.programId,
+          txSignature: onchainResult.signature,
+        };
+      } catch (error) {
+        reportError('market:onchain-trade-intent', error, 'On-chain trade intent olusturulamadi');
+        toast.error(error instanceof Error ? error.message : 'On-chain trade intent olusturulamadi');
+        return;
+      }
+    }
+
+    const response = await api.createTradeOffer(selectedListing.id, publicKey.toBase58(), onchainPayload, walletAuth);
     if (response.success) {
       toast.success(t('common.success'));
       setTradeDialogOpen(false);
@@ -173,6 +265,19 @@ export function MarketPage() {
 
     setIsCancellingListingId(listingId);
     try {
+      const currentListing = [...listings, ...myListings].find((entry) => entry.id === listingId);
+      if (currentListing?.onchainListingPda) {
+        try {
+          await cancelOnchainMarketListing(connection, wallet, {
+            listingEscrow: currentListing.onchainListingPda,
+          });
+        } catch (error) {
+          reportError('market:onchain-cancel-listing', error, 'On-chain market listing iptal edilemedi');
+          toast.error(error instanceof Error ? error.message : 'On-chain listing iptal edilemedi');
+          return;
+        }
+      }
+
       const response = await api.cancelListing(listingId, walletAddress, walletAuth);
       if (response.success) {
         toast.success(t('market.cancelSuccess'));
@@ -221,111 +326,179 @@ export function MarketPage() {
     offeredItem: localizeShopItem(listing.offeredItem, language),
   });
 
+  const systemStatuses: SystemStatusItem[] = [
+    {
+      id: 'market-backend-feed',
+      source: 'backend',
+      state: marketFeedError ? 'degraded' : 'healthy',
+      severity: marketFeedError ? 'warning' : 'info',
+      title: 'Backend Listing Feed',
+      detail: marketFeedError || 'Pazar ilan akisi backend uzerinden normal calisiyor.',
+      checkedAt: statusCheckedAt || undefined,
+      context: `${listings.length} aktif ilan`,
+    },
+    {
+      id: 'market-onchain-inventory',
+      source: 'onchain',
+      state: inventoryError ? 'degraded' : 'healthy',
+      severity: inventoryError ? 'warning' : 'info',
+      title: 'On-Chain Inventory',
+      detail: inventoryError || 'Ilan acilabilir envanter itemlari on-chain hesaptan aliniyor.',
+      checkedAt: statusCheckedAt || undefined,
+      context: inventoryError ? connection.rpcEndpoint.replace(/^https?:\/\//, '') : `${inventoryItems.length} item hazir`,
+    },
+    {
+      id: 'market-onchain-settlement',
+      source: 'onchain',
+      state: 'healthy',
+      severity: 'info',
+      title: 'On-Chain Settlement Layer',
+      detail: visibleListings.some((listing) => listing.onchainListingPda)
+        ? 'Market feed icinde on-chain listing mirror kayitlari goruluyor.'
+        : 'Settlement katmani hazir. Henuz mirrored listing gorunmuyor; ilk on-chain listing acildiginda burada izlenecek.',
+      checkedAt: statusCheckedAt || undefined,
+      context: visibleListings.some((listing) => listing.onchainListingPda)
+        ? `${visibleListings.filter((listing) => listing.onchainListingPda).length} mirrored listing`
+        : 'duan_market',
+    },
+  ];
+
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-8">
-        <div>
-          <h1 className="text-4xl font-bold mb-2">{t('market.title')}</h1>
-          <p className="text-muted-foreground">{t('market.subtitle')}</p>
-        </div>
-
-        <Dialog>
-          <DialogTrigger asChild>
-            <Button className="gap-2">
-              <Plus className="w-5 h-5" />
-              {t('market.createListing')}
+    <>
+      <PageShell
+        hero={(
+          <PageHero
+            eyebrow="PLAYER MARKET"
+            title={t('market.title')}
+            description={t('market.subtitle')}
+            accent="from-emerald-400/15 via-lime-300/10 to-cyan-300/15"
+            panelTitle="TRADING LAYER"
+            panelBody="Ilan akisi backend uzerinden akar; ilan acmak icin kullanicinin on-chain envanterindeki itemlar kullanilir."
+            metrics={[
+              { label: 'Feed', value: `${listings.length}` },
+              { label: 'Mine', value: `${myListings.length}` },
+              { label: 'Inventory', value: `${inventoryItems.length}` },
+            ]}
+            actions={(
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button className="gap-2">
+                    <Plus className="w-5 h-5" />
+                    {t('market.createListing')}
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-2xl">
+                  <DialogHeader>
+                    <DialogTitle>{t('market.createListing')}</DialogTitle>
+                    <DialogDescription>{t('market.createListingDesc')}</DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">{t('market.offeredItem')}</label>
+                      <Select value={offeredItemId} onValueChange={setOfferedItemId}>
+                        <SelectTrigger>
+                          <SelectValue placeholder={inventoryLoading ? t('common.loading') : t('market.offeredItem')} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {localizedInventoryItems.map((inventoryItem) => (
+                            <SelectItem key={inventoryItem.id} value={inventoryItem.item.id}>
+                              {inventoryItem.item.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {inventoryItems.length === 0 && !inventoryLoading && (
+                        <p className="text-xs text-muted-foreground mt-2">{inventoryError || t('market.noInventoryItems')}</p>
+                      )}
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">{t('market.wantedItem')}</label>
+                      <Select value={wantedType} onValueChange={(value: 'token' | 'item' | 'both') => setWantedType(value)}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="token">Token</SelectItem>
+                          <SelectItem value="item">Item</SelectItem>
+                          <SelectItem value="both">Token + Item</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">{t('market.tokenAmount')}</label>
+                      <Input type="number" value={wantedTokenAmount} onChange={(e) => setWantedTokenAmount(e.target.value)} placeholder="150" />
+                      <p className="text-xs text-muted-foreground mt-2">{t('market.tokenAmountHint')}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">{t('market.wantedItemName')}</label>
+                      <Input value={wantedItemName} onChange={(e) => setWantedItemName(e.target.value)} placeholder="Item..." />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">{t('market.duration')}</label>
+                      <Select value={duration} onValueChange={setDuration}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="24">24 saat</SelectItem>
+                          <SelectItem value="48">48 saat</SelectItem>
+                          <SelectItem value="72">72 saat</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">{t('market.note')}</label>
+                      <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} />
+                    </div>
+                    <Button className="w-full" onClick={() => void handleCreateListing()}>{t('market.createListing')}</Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            )}
+          />
+        )}
+      >
+      <GlassCard className="p-5 md:p-6">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Market Views</p>
+            <h2 className="mt-2 text-2xl font-bold">{t('market.title')}</h2>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <Button variant={activeView === 'feed' ? 'default' : 'outline'} onClick={() => setActiveView('feed')}>
+              {t('market.feed')}
             </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>{t('market.createListing')}</DialogTitle>
-              <DialogDescription>{t('market.createListingDesc')}</DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <label className="text-sm font-medium mb-2 block">{t('market.offeredItem')}</label>
-                <Select value={offeredItemId} onValueChange={setOfferedItemId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder={inventoryLoading ? t('common.loading') : t('market.offeredItem')} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {localizedInventoryItems.map((inventoryItem) => (
-                      <SelectItem key={inventoryItem.id} value={inventoryItem.item.id}>
-                        {inventoryItem.item.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {inventoryItems.length === 0 && !inventoryLoading && (
-                  <p className="text-xs text-muted-foreground mt-2">{t('market.noInventoryItems')}</p>
-                )}
-              </div>
-              <div>
-                <label className="text-sm font-medium mb-2 block">{t('market.wantedItem')}</label>
-                <Select value={wantedType} onValueChange={(value: 'token' | 'item' | 'both') => setWantedType(value)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="token">Token</SelectItem>
-                    <SelectItem value="item">Item</SelectItem>
-                    <SelectItem value="both">Token + Item</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <label className="text-sm font-medium mb-2 block">{t('market.tokenAmount')}</label>
-                <Input type="number" value={wantedTokenAmount} onChange={(e) => setWantedTokenAmount(e.target.value)} placeholder="150" />
-                <p className="text-xs text-muted-foreground mt-2">{t('market.tokenAmountHint')}</p>
-              </div>
-              <div>
-                <label className="text-sm font-medium mb-2 block">{t('market.wantedItemName')}</label>
-                <Input value={wantedItemName} onChange={(e) => setWantedItemName(e.target.value)} placeholder="Item..." />
-              </div>
-              <div>
-                <label className="text-sm font-medium mb-2 block">{t('market.duration')}</label>
-                <Select value={duration} onValueChange={setDuration}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="24">24 saat</SelectItem>
-                    <SelectItem value="48">48 saat</SelectItem>
-                    <SelectItem value="72">72 saat</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <label className="text-sm font-medium mb-2 block">{t('market.note')}</label>
-                <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} />
-              </div>
-              <Button className="w-full" onClick={() => void handleCreateListing()}>{t('market.createListing')}</Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-      </div>
-
-      <div className="flex gap-3 mb-6">
-        <Button variant={activeView === 'feed' ? 'default' : 'outline'} onClick={() => setActiveView('feed')}>
-          {t('market.feed')}
-        </Button>
-        <Button variant={activeView === 'mine' ? 'default' : 'outline'} onClick={() => setActiveView('mine')}>
-          {t('market.myListings')}
-        </Button>
-      </div>
+            <Button variant={activeView === 'mine' ? 'default' : 'outline'} onClick={() => setActiveView('mine')}>
+              {t('market.myListings')}
+            </Button>
+          </div>
+        </div>
+      </GlassCard>
 
       {isLoading ? (
-        <GlassCard className="p-12 text-center">{t('common.loading')}</GlassCard>
+        <>
+          <LoadingStateCard
+            title="Market katmani hazirlaniyor"
+            description="Ilan akisi ve kullanici envanteri senkronize ediliyor."
+          />
+          <ContentGridSkeleton count={3} imageClassName="h-28" contentLines={4} />
+        </>
+      ) : marketFeedError && visibleListings.length === 0 ? (
+        <MaintenanceStateCard
+          title="Market feed gecici olarak kisitli"
+          description={marketFeedError}
+          onAction={() => { void loadListings(); }}
+        />
       ) : visibleListings.length === 0 ? (
-        <GlassCard className="p-12 text-center">
-          <Clock className="w-14 h-14 mx-auto mb-4 text-muted-foreground" />
-          <h3 className="text-xl font-bold mb-2">{t('market.emptyTitle')}</h3>
-          <p className="text-muted-foreground">{t('market.emptyDesc')}</p>
-        </GlassCard>
+        <EmptyStateCard
+          title={t('market.emptyTitle')}
+          description={t('market.emptyDesc')}
+          icon={Clock}
+        />
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-5 md:space-y-6">
           {visibleListings.map((rawListing, index) => {
             const listing = getLocalizedListing(rawListing);
             return (
             <motion.div key={listing.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05, duration: 0.3 }}>
-              <GlassCard hover className="p-4 cursor-pointer" onClick={() => { setSelectedListing(listing); setDetailDialogOpen(true); }}>
-                <div className="flex items-center justify-between mb-4">
+              <GlassCard hover className="cursor-pointer p-5 md:p-6" onClick={() => { setSelectedListing(listing); setDetailDialogOpen(true); }}>
+                <div className="mb-5 flex items-center justify-between">
                   <div>
                     <div className="font-medium">{listing.sellerUsername || listing.sellerWallet}</div>
                     <div className="text-xs text-muted-foreground">{getTimeRemaining(listing.expiresAt)}</div>
@@ -342,10 +515,10 @@ export function MarketPage() {
                     </Badge>
                   </div>
                 </div>
-                <div className="flex items-center gap-6">
-                  <div className="flex items-center gap-3 flex-1">
+                <div className="flex flex-col gap-6 xl:flex-row xl:items-center">
+                  <div className="flex items-center gap-4 flex-1">
                     <div className="w-24 h-24 rounded-lg overflow-hidden flex-shrink-0">
-                      <img src={resolveAssetUrl(listing.offeredItem.imageUrl)} alt={listing.offeredItem.name} className="w-full h-full object-cover" />
+                      <ImageWithFallback src={resolveAssetUrl(listing.offeredItem.imageUrl)} alt={listing.offeredItem.name} className="w-full h-full object-cover" />
                     </div>
                     <div className="flex-1">
                       <p className="text-sm text-muted-foreground mb-1">{t('market.offered')}</p>
@@ -353,7 +526,7 @@ export function MarketPage() {
                       <RarityBadge rarity={listing.offeredItem.rarity} />
                     </div>
                   </div>
-                  <ArrowRight className="w-8 h-8 text-primary flex-shrink-0" />
+                  <ArrowRight className="hidden w-8 h-8 text-primary xl:block flex-shrink-0" />
                   <div className="flex-1">
                     <p className="text-sm text-muted-foreground mb-1">{t('market.wanted')}</p>
                     <p className="font-bold text-lg">{renderWanted(listing)}</p>
@@ -376,7 +549,7 @@ export function MarketPage() {
                     )}
                   </div>
                 </div>
-                {listing.note && <p className="text-sm text-muted-foreground mt-4 p-3 bg-muted/30 rounded-lg">{listing.note}</p>}
+                {listing.note && <p className="mt-5 rounded-2xl bg-muted/30 p-4 text-sm leading-6 text-muted-foreground">{listing.note}</p>}
               </GlassCard>
             </motion.div>
           )})}
@@ -416,7 +589,7 @@ export function MarketPage() {
                 <DialogTitle>{selectedListing.offeredItem.name}</DialogTitle>
                 <DialogDescription>{selectedListing.sellerUsername || selectedListing.sellerWallet}</DialogDescription>
               </DialogHeader>
-              <img src={resolveAssetUrl(selectedListing.offeredItem.imageUrl)} alt={selectedListing.offeredItem.name} className="w-full aspect-video object-cover rounded-lg" />
+              <ImageWithFallback src={resolveAssetUrl(selectedListing.offeredItem.imageUrl)} alt={selectedListing.offeredItem.name} className="w-full aspect-video object-cover rounded-lg" />
               <p className="text-sm text-muted-foreground">{selectedListing.note || t('market.noAdditionalNote')}</p>
               {selectedListing.sellerWallet === walletAddress && (
                 <Button
@@ -433,6 +606,15 @@ export function MarketPage() {
           )}
         </DialogContent>
       </Dialog>
-    </div>
+      </PageShell>
+      {isAdmin ? (
+        <NotificationRail
+          title="Market Durum Merkezi"
+          description="Burada pazar tarafindaki backend feed ve on-chain envanter durumunu ayri ayri gorebilirsin."
+          triggerLabel="Market Status"
+          items={systemStatuses}
+        />
+      ) : null}
+    </>
   );
 }

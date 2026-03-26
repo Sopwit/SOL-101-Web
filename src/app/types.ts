@@ -46,6 +46,21 @@ export interface ForumPostWithComments extends ForumPost {
 
 export type Rarity = 'common' | 'rare' | 'epic' | 'legendary';
 
+export type SystemStatusState = 'healthy' | 'degraded' | 'offline';
+export type SystemStatusSource = 'onchain' | 'backend' | 'assets' | 'ui';
+export type SystemStatusSeverity = 'info' | 'warning' | 'error';
+
+export interface SystemStatusItem {
+  id: string;
+  source: SystemStatusSource;
+  state: SystemStatusState;
+  severity: SystemStatusSeverity;
+  title: string;
+  detail: string;
+  checkedAt?: string;
+  context?: string;
+}
+
 export interface ShopItem {
   id: string;
   name: string;
@@ -90,6 +105,12 @@ export interface MarketListing {
   expiresAt: string;
   status: ListingStatus;
   createdAt: string;
+  marketMode?: 'backend' | 'hybrid' | 'onchain';
+  onchainListingPda?: string;
+  onchainTradeIntentPda?: string;
+  onchainProgramId?: string;
+  onchainStatus?: 'pending' | 'mirrored' | 'accepted' | 'cancelled';
+  txSignature?: string;
   language?: 'tr' | 'en';
   isTranslated?: boolean;
 }

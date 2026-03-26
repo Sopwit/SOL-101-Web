@@ -8,17 +8,17 @@ export function NotFoundPage() {
   const { t } = useLanguage();
   
   return (
-    <div className="container mx-auto px-4 py-20">
-      <GlassCard className="max-w-2xl mx-auto p-12 text-center">
-        <div className="text-9xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent mb-4">
+    <div className="container mx-auto px-4 py-24 md:px-6">
+      <GlassCard className="mx-auto max-w-3xl p-12 text-center md:p-14">
+        <div className="mb-5 text-9xl font-black tracking-[0.08em] bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
           404
         </div>
-        <h1 className="text-3xl font-bold mb-4">{t('notFound.title')}</h1>
-        <p className="text-muted-foreground mb-8">
+        <h1 className="mb-4 text-4xl font-black">{t('notFound.title')}</h1>
+        <p className="mx-auto mb-10 max-w-2xl text-lg leading-8 text-muted-foreground">
           {t('notFound.description')}
         </p>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-          <Link to="/">
+          <Link to="/home">
             <Button className="gap-2">
               <Home className="w-5 h-5" />
               {t('notFound.goHome')}

@@ -1,0 +1,26 @@
+[package]
+name = "duan_market"
+version = "0.1.0"
+description = "On-chain market listing and trade intent state machine for DUAN"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "duan_market"
+
+[features]
+default = []
+idl-build = ["anchor-lang/idl-build"]
+cpi = ["no-entrypoint"]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+
+[lints.rust]
+unexpected_cfgs = { level = "allow", check-cfg = [
+  'cfg(feature, values("anchor-debug", "custom-heap", "custom-panic"))',
+  'cfg(target_os, values("solana"))',
+] }
+
+[dependencies]
+anchor-lang = { version = "0.32.1", features = ["init-if-needed"] }

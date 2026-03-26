@@ -2,11 +2,13 @@ import { Hono } from "npm:hono@4";
 import { cors } from "npm:hono@4/cors";
 import { logger } from "npm:hono@4/logger";
 import nacl from "npm:tweetnacl@1.0.3";
+import anchor, { type Idl } from "npm:@coral-xyz/anchor@0.32.1";
 import { PublicKey } from "npm:@solana/web3.js@1.98.4";
 import * as kv from "./kv_store.tsx";
 import { DUAN_TO_SOL_RATE } from "../../shared/duanEconomy.ts";
 import { LEGACY_SHOP_ITEM_IDS, SHOP_ITEM_CATALOG } from "../../shared/shopCatalog.ts";
 import { PROFILE_AVATAR_OPTIONS, PROFILE_BACKGROUND_OPTIONS } from "../../shared/profileCosmetics.ts";
+import duanShopIdl from "../../target/idl/duan_shop.json" with { type: "json" };
 
 // DUAN Edge Function:
 // Bu dosya forum, shop, market, profil ve oyun senkronizasyonunun ortak
@@ -21,7 +23,12 @@ type AuthClaims = {
 };
 
 const AUTH_MAX_AGE_MS = 5 * 60 * 1000;
+const ADMIN_SESSION_TTL_MS = 20 * 60 * 1000;
 const XP_PER_LEVEL = 120;
+const DUAN_SHOP_ACHIEVEMENT_BYTES = 32;
+const DUAN_SHOP_PROGRAM_ID = new anchor.web3.PublicKey(
+  Deno.env.get("DUAN_SHOP_PROGRAM_ID") ?? duanShopIdl.address,
+);
 
 // Web tarafinda tetiklenen davranislari anlamli odullere baglayan basit
 // achievement matrisi. Profil/stats tarafi bu liste uzerinden normalize edilir.
@@ -106,6 +113,8 @@ const WEB_ACHIEVEMENTS = [
   },
 ] as const;
 
+const ACHIEVEMENT_INDEX_MAP = new Map(WEB_ACHIEVEMENTS.map((achievement, index) => [achievement.id, index]));
+
 function detectContentLanguage(text: string): "tr" | "en" {
   const normalized = text.toLocaleLowerCase("tr-TR");
   const turkishCharPattern = /[çğıöşü]/;
@@ -129,6 +138,146 @@ function getRuntimeSolanaConfig() {
     treasury: Deno.env.get("DUAN_SHOP_TREASURY") ?? null,
     programId: Deno.env.get("DUAN_SHOP_PROGRAM_ID") ?? null,
   };
+}
+
+function resolveServerSolanaRpcUrl() {
+  return (
+    Deno.env.get("ANCHOR_PROVIDER_URL") ??
+    Deno.env.get("SOLANA_RPC_URL") ??
+    Deno.env.get("VITE_SOLANA_RPC_URL") ??
+    "https://api.devnet.solana.com"
+  );
+}
+
+function resolveGameAuthoritySecretKey() {
+  return (
+    Deno.env.get("DUAN_SHOP_GAME_AUTHORITY_SECRET_KEY") ??
+    Deno.env.get("ANCHOR_WALLET_SECRET_KEY") ??
+    null
+  );
+}
+
+function getAdminWalletAllowlist() {
+  const raw = Deno.env.get("ADMIN_WALLETS") ?? Deno.env.get("VITE_ADMIN_WALLETS") ?? "";
+  return raw
+    .split(",")
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+async function logAdminAction(action: string, walletAddress: string, metadata: Record<string, unknown> = {}) {
+  const record = {
+    id: `adminlog_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    action,
+    walletAddress,
+    metadata,
+    createdAt: new Date().toISOString(),
+  };
+
+  await kv.set(`admin-log:${record.id}`, record);
+  return record;
+}
+
+function createServerAnchorProvider() {
+  const rawSecretKey = resolveGameAuthoritySecretKey();
+  if (!rawSecretKey) {
+    return { provider: null, error: "Game authority secret key env tanimli degil." };
+  }
+
+  try {
+    const secretKey = Uint8Array.from(JSON.parse(rawSecretKey));
+    const wallet = new anchor.Wallet(anchor.web3.Keypair.fromSecretKey(secretKey));
+    const connection = new anchor.web3.Connection(resolveServerSolanaRpcUrl(), "confirmed");
+    const provider = new anchor.AnchorProvider(connection, wallet, { commitment: "confirmed" });
+    return { provider, error: null };
+  } catch (error) {
+    return {
+      provider: null,
+      error: `Game authority secret key parse edilemedi: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
+
+function getShopConfigPda() {
+  return anchor.web3.PublicKey.findProgramAddressSync(
+    [Buffer.from("shop-config")],
+    DUAN_SHOP_PROGRAM_ID,
+  );
+}
+
+function getPlayerProfilePda(owner: PublicKey) {
+  const [shopConfig] = getShopConfigPda();
+  return anchor.web3.PublicKey.findProgramAddressSync(
+    [Buffer.from("player-profile"), shopConfig.toBuffer(), owner.toBuffer()],
+    DUAN_SHOP_PROGRAM_ID,
+  );
+}
+
+function encodeAchievementFlags(stats: any) {
+  const bytes = new Uint8Array(DUAN_SHOP_ACHIEVEMENT_BYTES);
+  const unlockedAchievements = Array.isArray(stats?.achievements) ? stats.achievements : [];
+
+  for (const achievement of unlockedAchievements) {
+    const achievementId = typeof achievement === "string" ? achievement : achievement?.id;
+    const index = ACHIEVEMENT_INDEX_MAP.get(achievementId);
+    if (index === undefined) {
+      continue;
+    }
+
+    const byteIndex = Math.floor(index / 8);
+    const bitIndex = index % 8;
+    bytes[byteIndex] |= 1 << bitIndex;
+  }
+
+  return Array.from(bytes);
+}
+
+async function syncPlayerProfileOnchain(walletAddress: string, stats: any) {
+  const { provider, error } = createServerAnchorProvider();
+  if (!provider) {
+    return {
+      synced: false,
+      skipped: true,
+      error,
+    };
+  }
+
+  try {
+    anchor.setProvider(provider);
+    const program = new anchor.Program(duanShopIdl as Idl, provider);
+    const owner = new anchor.web3.PublicKey(walletAddress);
+    const [shopConfig] = getShopConfigPda();
+    const [playerProfile] = getPlayerProfilePda(owner);
+
+    const signature = await program.methods.upsertPlayerProfile({
+      level: Math.max(1, Number(stats?.level || 1)),
+      xp: new anchor.BN(Math.max(0, Number(stats?.xp || 0))),
+      xpToNextLevel: new anchor.BN(Math.max(0, Number(stats?.xpToNextLevel || XP_PER_LEVEL))),
+      totalItems: Math.max(0, Number(stats?.totalItems || 0)),
+      totalTrades: Math.max(0, Number(stats?.totalTrades || 0)),
+      achievements: encodeAchievementFlags(stats),
+    }).accounts({
+      shopConfig,
+      gameAuthority: provider.wallet.publicKey,
+      owner,
+      playerProfile,
+      systemProgram: anchor.web3.SystemProgram.programId,
+    }).rpc();
+
+    return {
+      synced: true,
+      skipped: false,
+      signature,
+      playerProfile: playerProfile.toBase58(),
+    };
+  } catch (syncError) {
+    console.error("Failed to sync player profile on-chain:", syncError);
+    return {
+      synced: false,
+      skipped: false,
+      error: syncError instanceof Error ? syncError.message : String(syncError),
+    };
+  }
 }
 
 // Ceviri servisi yanit vermezse akis bozulmaz; orijinal metin fallback olarak
@@ -445,6 +594,117 @@ async function verifyWalletAuth(c: any, expectedAction: string, expectedWalletAd
   }
 }
 
+async function verifyAdminWalletAuth(c: any, expectedAction: string) {
+  const walletAddress = c.req.header("x-wallet-address");
+  if (!walletAddress) {
+    return { ok: false, status: 401, error: "Missing admin wallet address" };
+  }
+
+  const auth = await verifyWalletAuth(c, expectedAction, walletAddress);
+  if (!auth.ok) {
+    return auth;
+  }
+
+  const allowlist = getAdminWalletAllowlist();
+  if (!allowlist.includes(walletAddress.toLowerCase())) {
+    return { ok: false, status: 403, error: "Wallet is not allowed to access admin endpoints" };
+  }
+
+  return { ok: true, walletAddress };
+}
+
+function generateAdminSessionToken() {
+  const bytes = crypto.getRandomValues(new Uint8Array(24));
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function createAdminSessionRecord(walletAddress: string) {
+  const token = generateAdminSessionToken();
+  const expiresAt = new Date(Date.now() + ADMIN_SESSION_TTL_MS).toISOString();
+  const session = {
+    token,
+    walletAddress,
+    createdAt: new Date().toISOString(),
+    expiresAt,
+  };
+
+  await kv.set(`admin-session:${token}`, session);
+  return session;
+}
+
+async function verifyAdminSession(c: any) {
+  const token = c.req.header("x-admin-token");
+  if (!token) {
+    return { ok: false, status: 401, error: "Missing admin session token" };
+  }
+
+  const session = await kv.get(`admin-session:${token}`);
+  if (!session) {
+    return { ok: false, status: 401, error: "Admin session not found" };
+  }
+
+  if (new Date(session.expiresAt).getTime() <= Date.now()) {
+    await kv.del(`admin-session:${token}`);
+    return { ok: false, status: 401, error: "Admin session expired" };
+  }
+
+  const allowlist = getAdminWalletAllowlist();
+  if (!allowlist.includes(String(session.walletAddress).toLowerCase())) {
+    return { ok: false, status: 403, error: "Admin wallet is no longer allowlisted" };
+  }
+
+  return { ok: true, walletAddress: session.walletAddress, token, expiresAt: session.expiresAt };
+}
+
+async function deleteForumPostCascade(postId: string) {
+  const post = await kv.get(`post:${postId}`);
+  if (!post) {
+    return false;
+  }
+
+  const likeEntries = await kv.getByPrefix(`like:${postId}:`);
+  const commentEntries = await kv.getByPrefix(`comment:${postId}:`);
+
+  await kv.del(`post:${postId}`);
+  await Promise.all([
+    ...likeEntries.map((entry: any) => kv.del(`like:${postId}:${entry.walletAddress}`)),
+    ...commentEntries.flatMap((entry: any) => {
+      return [
+        kv.del(`comment:${postId}:${entry.id}`),
+        kv.del(createTranslationCacheKey("comment", entry.id, "content", "tr")),
+        kv.del(createTranslationCacheKey("comment", entry.id, "content", "en")),
+      ];
+    }),
+    kv.del(createTranslationCacheKey("post", postId, "title", "tr")),
+    kv.del(createTranslationCacheKey("post", postId, "title", "en")),
+    kv.del(createTranslationCacheKey("post", postId, "content", "tr")),
+    kv.del(createTranslationCacheKey("post", postId, "content", "en")),
+  ]);
+
+  return true;
+}
+
+async function deleteForumCommentCascade(postId: string, commentId: string) {
+  const comment = await kv.get(`comment:${postId}:${commentId}`);
+  if (!comment) {
+    return false;
+  }
+
+  await kv.del(`comment:${postId}:${commentId}`);
+  await Promise.all([
+    kv.del(createTranslationCacheKey("comment", commentId, "content", "tr")),
+    kv.del(createTranslationCacheKey("comment", commentId, "content", "en")),
+  ]);
+
+  const post = await kv.get(`post:${postId}`);
+  if (post) {
+    post.commentCount = Math.max(0, Number(post.commentCount || 0) - 1);
+    await kv.set(`post:${postId}`, post);
+  }
+
+  return true;
+}
+
 // Tum route'larda temel request log'u acik tutulur.
 app.use('*', logger(console.log));
 
@@ -459,6 +719,7 @@ app.use(
       "x-wallet-address",
       "x-wallet-message",
       "x-wallet-signature",
+      "x-admin-token",
     ],
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     exposeHeaders: ["Content-Length"],
@@ -595,38 +856,84 @@ async function findInventoryItem(walletAddress: string, offeredItemId: string) {
 initializeShopItems();
 
 // Health check endpoint
-app.get("/make-server-5d6242bb/health", (c) => {
-  return kv.ping()
-    .then(() => c.json({
-      status: "ok",
-      service: "DUAN Edge Functions",
-      env: {
-        supabaseUrl: Boolean(Deno.env.get("SUPABASE_URL")),
-        supabaseServiceRoleKey: Boolean(Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")),
-      },
-      database: {
-        connected: true,
-        table: "kv_store_5d6242bb",
-      },
-      timestamp: new Date().toISOString(),
-    }))
-    .catch((error) => {
-      console.error("Health check database error:", error);
-      return c.json({
-        status: "error",
-        service: "DUAN Edge Functions",
-        env: {
-          supabaseUrl: Boolean(Deno.env.get("SUPABASE_URL")),
-          supabaseServiceRoleKey: Boolean(Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")),
-        },
-        database: {
-          connected: false,
-          table: "kv_store_5d6242bb",
-          error: error instanceof Error ? error.message : "Unknown database error",
-        },
-        timestamp: new Date().toISOString(),
-      }, 500);
-    });
+app.get("/make-server-5d6242bb/health", async (c) => {
+  let databaseConnected = false;
+  let databaseError: string | undefined;
+
+  try {
+    await kv.ping();
+    databaseConnected = true;
+  } catch (error) {
+    console.error("Health check database error:", error);
+    databaseError = error instanceof Error ? error.message : "Unknown database error";
+  }
+
+  const rpcUrl = resolveServerSolanaRpcUrl();
+  const [shopConfig] = getShopConfigPda();
+  const gameAuthoritySecretPresent = Boolean(resolveGameAuthoritySecretKey());
+  const { provider, error: providerError } = createServerAnchorProvider();
+  const connection = provider?.connection ?? new anchor.web3.Connection(rpcUrl, "confirmed");
+
+  let rpcReachable = false;
+  let rpcError: string | undefined;
+  let programDeployed = false;
+  let shopConfigInitialized = false;
+  let latestSlot: number | null = null;
+
+  try {
+    latestSlot = await connection.getSlot("confirmed");
+    rpcReachable = true;
+
+    const [programAccountInfo, shopConfigInfo] = await Promise.all([
+      connection.getAccountInfo(DUAN_SHOP_PROGRAM_ID, "confirmed"),
+      connection.getAccountInfo(shopConfig, "confirmed"),
+    ]);
+
+    programDeployed = Boolean(programAccountInfo?.executable);
+    shopConfigInitialized = Boolean(shopConfigInfo);
+  } catch (error) {
+    rpcError = error instanceof Error ? error.message : String(error);
+  }
+
+  const playerProfileSyncReady = Boolean(
+    rpcReachable &&
+    programDeployed &&
+    shopConfigInitialized &&
+    provider &&
+    !providerError
+  );
+
+  const status = databaseConnected ? "ok" : "error";
+
+  return c.json({
+    status,
+    service: "DUAN Edge Functions",
+    env: {
+      supabaseUrl: Boolean(Deno.env.get("SUPABASE_URL")),
+      supabaseServiceRoleKey: Boolean(Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")),
+    },
+    database: {
+      connected: databaseConnected,
+      table: "kv_store_5d6242bb",
+      ...(databaseError ? { error: databaseError } : {}),
+    },
+    solana: {
+      cluster: "devnet",
+      rpcUrl,
+      rpcReachable,
+      latestSlot,
+      programId: DUAN_SHOP_PROGRAM_ID.toBase58(),
+      programDeployed,
+      shopConfig: shopConfig.toBase58(),
+      shopConfigInitialized,
+      gameAuthoritySecretPresent,
+      gameAuthorityReady: Boolean(provider && !providerError),
+      playerProfileSyncReady,
+      ...(providerError ? { providerError } : {}),
+      ...(rpcError ? { rpcError } : {}),
+    },
+    timestamp: new Date().toISOString(),
+  }, databaseConnected ? 200 : 500);
 });
 
 // ========== PLATFORM STATS ==========
@@ -990,25 +1297,7 @@ app.delete("/make-server-5d6242bb/forum/posts/:postId", async (c) => {
       return c.json({ error: "You can only delete your own posts" }, 403);
     }
 
-    const likeEntries = await kv.getByPrefix(`like:${postId}:`);
-    const commentEntries = await kv.getByPrefix(`comment:${postId}:`);
-
-    await kv.del(`post:${postId}`);
-    await Promise.all([
-      ...likeEntries.map((entry: any) => kv.del(`like:${postId}:${entry.walletAddress}`)),
-      ...commentEntries.flatMap((entry: any) => {
-        const deletes = [
-          kv.del(`comment:${postId}:${entry.id}`),
-          kv.del(createTranslationCacheKey("comment", entry.id, "content", "tr")),
-          kv.del(createTranslationCacheKey("comment", entry.id, "content", "en")),
-        ];
-        return deletes;
-      }),
-      kv.del(createTranslationCacheKey("post", postId, "title", "tr")),
-      kv.del(createTranslationCacheKey("post", postId, "title", "en")),
-      kv.del(createTranslationCacheKey("post", postId, "content", "tr")),
-      kv.del(createTranslationCacheKey("post", postId, "content", "en")),
-    ]);
+    await deleteForumPostCascade(postId);
     return c.json({ deleted: true });
   } catch (error) {
     console.error("Error deleting post:", error);
@@ -1241,10 +1530,16 @@ app.post("/make-server-5d6242bb/market/listings", async (c) => {
       ...data,
       offeredItemId: offeredInventoryItem.id,
       offeredItem,
+      marketMode: data.marketMode || "backend",
+      onchainListingPda: data.onchainListingPda || null,
+      onchainProgramId: data.onchainProgramId || null,
+      onchainStatus: data.onchainListingPda ? "mirrored" : "pending",
+      txSignature: data.txSignature || null,
       language: detectContentLanguage(`${data.note || ""} ${data.wantedItemName || ""}`),
       status: "active",
       createdAt: new Date().toISOString(),
-      expiresAt: new Date(Date.now() + data.duration * 60 * 60 * 1000).toISOString(),
+      expiresAt: data.expiresAt || new Date(Date.now() + data.duration * 60 * 60 * 1000).toISOString(),
+      listingNonce: data.listingNonce || null,
     };
 
     await kv.set(`listing:${listing.id}`, listing);
@@ -1311,6 +1606,10 @@ app.post("/make-server-5d6242bb/market/listings/:listingId/trade", async (c) => 
       id: `trade_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
       listingId,
       ...data,
+      marketMode: data.marketMode || "backend",
+      onchainTradeIntentPda: data.onchainTradeIntentPda || null,
+      onchainProgramId: data.onchainProgramId || null,
+      txSignature: data.txSignature || null,
       status: "pending",
       createdAt: new Date().toISOString(),
     };
@@ -1342,6 +1641,286 @@ app.get("/make-server-5d6242bb/market/listings/user/:walletAddress", async (c) =
   } catch (error) {
     console.error("Error fetching user listings:", error);
     return c.json({ error: "Failed to fetch user listings" }, 500);
+  }
+});
+
+// ========== ADMIN ROUTES ==========
+
+app.post("/make-server-5d6242bb/admin/session", async (c) => {
+  const auth = await verifyAdminWalletAuth(c, "admin:session");
+  if (!auth.ok) {
+    return c.json({ error: auth.error }, auth.status);
+  }
+
+  try {
+    const session = await createAdminSessionRecord(auth.walletAddress);
+    await logAdminAction("admin:create_session", auth.walletAddress, { expiresAt: session.expiresAt });
+    return c.json({
+      token: session.token,
+      walletAddress: session.walletAddress,
+      expiresAt: session.expiresAt,
+    });
+  } catch (error) {
+    console.error("Error creating admin session:", error);
+    return c.json({ error: "Failed to create admin session" }, 500);
+  }
+});
+
+app.get("/make-server-5d6242bb/admin/overview", async (c) => {
+  const auth = await verifyAdminSession(c);
+  if (!auth.ok) {
+    return c.json({ error: auth.error }, auth.status);
+  }
+
+  try {
+    const [profiles, posts, listings, trades, tokenInfo] = await Promise.all([
+      kv.getByPrefix("profile:"),
+      kv.getByPrefix("post:"),
+      kv.getByPrefix("listing:"),
+      kv.getByPrefix("trade:"),
+      kv.get("token:info"),
+    ]);
+
+    const recentPosts = [...posts]
+      .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 5);
+    const recentListings = [...listings]
+      .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 5);
+    const recentTrades = [...trades]
+      .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 5);
+
+    return c.json({
+      summary: {
+        users: profiles.length,
+        posts: posts.length,
+        activeListings: listings.filter((entry: any) => entry.status === "active").length,
+        pendingTrades: trades.filter((entry: any) => entry.status === "pending").length,
+      },
+      recentPosts,
+      recentListings,
+      recentTrades,
+      tokenInfo: tokenInfo ?? null,
+      checkedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error("Error fetching admin overview:", error);
+    return c.json({ error: "Failed to fetch admin overview" }, 500);
+  }
+});
+
+app.get("/make-server-5d6242bb/admin/users", async (c) => {
+  const auth = await verifyAdminSession(c);
+  if (!auth.ok) {
+    return c.json({ error: auth.error }, auth.status);
+  }
+
+  try {
+    const profiles = await kv.getByPrefix("profile:");
+    const users = await Promise.all(profiles.map(async (profile: any) => {
+      const stats = await kv.get(`stats:${profile.walletAddress}`) ?? createDefaultStats();
+      return {
+        profile,
+        stats,
+      };
+    }));
+
+    users.sort((a: any, b: any) => {
+      const aDate = new Date(a.profile.createdAt ?? 0).getTime();
+      const bDate = new Date(b.profile.createdAt ?? 0).getTime();
+      return bDate - aDate;
+    });
+
+    return c.json(users);
+  } catch (error) {
+    console.error("Error fetching admin users:", error);
+    return c.json({ error: "Failed to fetch admin users" }, 500);
+  }
+});
+
+app.get("/make-server-5d6242bb/admin/forum/comments", async (c) => {
+  const auth = await verifyAdminSession(c);
+  if (!auth.ok) {
+    return c.json({ error: auth.error }, auth.status);
+  }
+
+  try {
+    const posts = await kv.getByPrefix("post:");
+    const comments = await Promise.all(posts.map(async (post: any) => {
+      const entries = await kv.getByPrefix(`comment:${post.id}:`);
+      return entries.map((entry: any) => ({
+        ...entry,
+        postTitle: post.title,
+      }));
+    }));
+
+    const flattened = comments.flat();
+    flattened.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return c.json(flattened);
+  } catch (error) {
+    console.error("Error fetching admin forum comments:", error);
+    return c.json({ error: "Failed to fetch admin forum comments" }, 500);
+  }
+});
+
+app.get("/make-server-5d6242bb/admin/forum/posts", async (c) => {
+  const auth = await verifyAdminSession(c);
+  if (!auth.ok) {
+    return c.json({ error: auth.error }, auth.status);
+  }
+
+  try {
+    const posts = await kv.getByPrefix("post:");
+    posts.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return c.json(posts);
+  } catch (error) {
+    console.error("Error fetching admin forum posts:", error);
+    return c.json({ error: "Failed to fetch admin forum posts" }, 500);
+  }
+});
+
+app.delete("/make-server-5d6242bb/admin/forum/posts/:postId", async (c) => {
+  const auth = await verifyAdminSession(c);
+  if (!auth.ok) {
+    return c.json({ error: auth.error }, auth.status);
+  }
+
+  try {
+    const { postId } = c.req.param();
+    const deleted = await deleteForumPostCascade(postId);
+    if (!deleted) {
+      return c.json({ error: "Post not found" }, 404);
+    }
+    await logAdminAction("admin:delete_post", auth.walletAddress, { postId });
+    return c.json({ deleted: true });
+  } catch (error) {
+    console.error("Error admin deleting post:", error);
+    return c.json({ error: "Failed to delete post" }, 500);
+  }
+});
+
+app.delete("/make-server-5d6242bb/admin/forum/comments/:postId/:commentId", async (c) => {
+  const auth = await verifyAdminSession(c);
+  if (!auth.ok) {
+    return c.json({ error: auth.error }, auth.status);
+  }
+
+  try {
+    const { postId, commentId } = c.req.param();
+    const deleted = await deleteForumCommentCascade(postId, commentId);
+    if (!deleted) {
+      return c.json({ error: "Comment not found" }, 404);
+    }
+    await logAdminAction("admin:delete_comment", auth.walletAddress, { postId, commentId });
+    return c.json({ deleted: true });
+  } catch (error) {
+    console.error("Error admin deleting comment:", error);
+    return c.json({ error: "Failed to delete comment" }, 500);
+  }
+});
+
+app.get("/make-server-5d6242bb/admin/market/listings", async (c) => {
+  const auth = await verifyAdminSession(c);
+  if (!auth.ok) {
+    return c.json({ error: auth.error }, auth.status);
+  }
+
+  try {
+    const listings = await kv.getByPrefix("listing:");
+    listings.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return c.json(listings);
+  } catch (error) {
+    console.error("Error fetching admin market listings:", error);
+    return c.json({ error: "Failed to fetch admin market listings" }, 500);
+  }
+});
+
+app.get("/make-server-5d6242bb/admin/market/trades", async (c) => {
+  const auth = await verifyAdminSession(c);
+  if (!auth.ok) {
+    return c.json({ error: auth.error }, auth.status);
+  }
+
+  try {
+    const trades = await kv.getByPrefix("trade:");
+    trades.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return c.json(trades);
+  } catch (error) {
+    console.error("Error fetching admin trades:", error);
+    return c.json({ error: "Failed to fetch admin trades" }, 500);
+  }
+});
+
+app.put("/make-server-5d6242bb/admin/market/trades/:tradeId", async (c) => {
+  const auth = await verifyAdminSession(c);
+  if (!auth.ok) {
+    return c.json({ error: auth.error }, auth.status);
+  }
+
+  try {
+    const { tradeId } = c.req.param();
+    const { status } = await c.req.json();
+    const allowedStatuses = ["pending", "accepted", "completed", "cancelled"];
+    if (!allowedStatuses.includes(status)) {
+      return c.json({ error: "Invalid trade status" }, 400);
+    }
+
+    const trade = await kv.get(`trade:${tradeId}`);
+    if (!trade) {
+      return c.json({ error: "Trade not found" }, 404);
+    }
+
+    trade.status = status;
+    trade.updatedAt = new Date().toISOString();
+    trade.updatedBy = auth.walletAddress;
+    await kv.set(`trade:${tradeId}`, trade);
+    await logAdminAction("admin:update_trade", auth.walletAddress, { tradeId, status });
+    return c.json({ updated: true, trade });
+  } catch (error) {
+    console.error("Error admin updating trade:", error);
+    return c.json({ error: "Failed to update trade" }, 500);
+  }
+});
+
+app.delete("/make-server-5d6242bb/admin/market/listings/:listingId", async (c) => {
+  const auth = await verifyAdminSession(c);
+  if (!auth.ok) {
+    return c.json({ error: auth.error }, auth.status);
+  }
+
+  try {
+    const { listingId } = c.req.param();
+    const listing = await kv.get(`listing:${listingId}`);
+    if (!listing) {
+      return c.json({ error: "Listing not found" }, 404);
+    }
+
+    listing.status = "cancelled";
+    listing.cancelledAt = new Date().toISOString();
+    listing.cancelledBy = auth.walletAddress;
+    await kv.set(`listing:${listingId}`, listing);
+    await logAdminAction("admin:cancel_listing", auth.walletAddress, { listingId });
+    return c.json({ cancelled: true });
+  } catch (error) {
+    console.error("Error admin cancelling listing:", error);
+    return c.json({ error: "Failed to cancel listing" }, 500);
+  }
+});
+
+app.get("/make-server-5d6242bb/admin/audit-logs", async (c) => {
+  const auth = await verifyAdminSession(c);
+  if (!auth.ok) {
+    return c.json({ error: auth.error }, auth.status);
+  }
+
+  try {
+    const logs = await kv.getByPrefix("admin-log:");
+    logs.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return c.json(logs.slice(0, 100));
+  } catch (error) {
+    console.error("Error fetching admin audit logs:", error);
+    return c.json({ error: "Failed to fetch admin audit logs" }, 500);
   }
 });
 
@@ -1381,7 +1960,7 @@ app.post("/make-server-5d6242bb/game/sync", async (c) => {
       stats.achievements = [...existingAchievements, ...newAchievements];
     }
 
-    await saveStatsWithAchievements(walletAddress, stats);
+    let normalizedStats = await saveStatsWithAchievements(walletAddress, stats);
 
     // Add items to inventory
     let syncedItemCount = 0;
@@ -1406,10 +1985,19 @@ app.post("/make-server-5d6242bb/game/sync", async (c) => {
     }
 
     if (syncedItemCount > 0) {
-      await incrementTotalItems(walletAddress, syncedItemCount);
+      normalizedStats = await incrementTotalItems(walletAddress, syncedItemCount);
     }
 
-    return c.json({ synced: true });
+    const onchainProfile = await syncPlayerProfileOnchain(walletAddress, normalizedStats);
+
+    return c.json({
+      synced: true,
+      onchainProfileSynced: onchainProfile.synced,
+      onchainProfileSkipped: onchainProfile.skipped ?? false,
+      onchainProfileSignature: onchainProfile.signature ?? null,
+      onchainProfileAddress: onchainProfile.playerProfile ?? null,
+      onchainProfileError: onchainProfile.error ?? null,
+    });
   } catch (error) {
     console.error("Error syncing game data:", error);
     return c.json({ error: "Failed to sync game data" }, 500);

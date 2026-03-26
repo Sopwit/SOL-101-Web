@@ -1,6 +1,7 @@
 import anchor, { type Idl } from '@coral-xyz/anchor';
 import duanShopIdl from '../target/idl/duan_shop.json' with { type: 'json' };
 import { SHOP_ITEM_CATALOG } from '../shared/shopCatalog.ts';
+import { createAnchorProvider } from './solana-runtime.ts';
 
 // Bu betik ortak shop katalogunu Anchor programina yazar. Runtime frontend
 // verisi ile on-chain item tanimlarinin ayni kaynakta kalmasi icin kullanilir.
@@ -26,12 +27,19 @@ function getShopItemPda(itemId: string) {
 }
 
 async function main() {
-  anchor.setProvider(anchor.AnchorProvider.env());
-  const provider = anchor.getProvider();
+  const provider = createAnchorProvider();
+  anchor.setProvider(provider);
   const program = new anchor.Program(duanShopIdl as Idl, provider);
   // Treasury verilmezse deploy eden wallet fallback olarak kullanilir.
   const treasury = process.env.DUAN_SHOP_TREASURY ?? provider.wallet.publicKey.toBase58();
+  const expectedProgramId = process.env.DUAN_SHOP_PROGRAM_ID;
   const [shopConfig] = getShopConfigPda();
+
+  if (expectedProgramId && expectedProgramId !== PROGRAM_ID.toBase58()) {
+    throw new Error(
+      `DUAN_SHOP_PROGRAM_ID mismatch. Env=${expectedProgramId} IDL=${PROGRAM_ID.toBase58()}`
+    );
+  }
 
   try {
     await program.methods.initializeShop().accounts({
@@ -70,6 +78,8 @@ async function main() {
 
     console.log(`Upserted ${item.id} -> ${shopItem.toBase58()}`);
   }
+
+  console.log(`Synced ${SHOP_ITEM_CATALOG.length} shop items to ${PROGRAM_ID.toBase58()}`);
 }
 
 main().catch((error) => {

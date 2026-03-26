@@ -1,5 +1,6 @@
 import type { User, ForumPost, ForumComment, ShopItem, MarketListing, InventoryItem } from '../types';
 import { resolveAssetUrl } from '../lib/assetUrls';
+import { reportError, reportEvent } from '../lib/telemetry';
 
 const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
 const publicAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -14,10 +15,130 @@ interface ApiResponse<T> {
   error?: string;
 }
 
+export interface ApiHealthResponse {
+  status: string;
+  service: string;
+  env: Record<string, boolean>;
+  database: {
+    connected: boolean;
+    table: string;
+    error?: string;
+  };
+  solana: {
+    cluster: 'devnet';
+    rpcUrl: string;
+    rpcReachable: boolean;
+    latestSlot: number | null;
+    programId: string;
+    programDeployed: boolean;
+    shopConfig: string;
+    shopConfigInitialized: boolean;
+    gameAuthoritySecretPresent: boolean;
+    gameAuthorityReady: boolean;
+    playerProfileSyncReady: boolean;
+    providerError?: string;
+    rpcError?: string;
+  };
+  timestamp: string;
+}
+
+export function normalizeHealthResponse(value: ApiHealthResponse | null | undefined): ApiHealthResponse | null {
+  if (!value) {
+    return null;
+  }
+
+  return {
+    status: value.status || 'error',
+    service: value.service || 'DUAN Edge Functions',
+    env: value.env || {},
+    database: {
+      connected: Boolean(value.database?.connected),
+      table: value.database?.table || 'unknown',
+      error: value.database?.error,
+    },
+    solana: {
+      cluster: value.solana?.cluster || 'devnet',
+      rpcUrl: value.solana?.rpcUrl || 'https://api.devnet.solana.com',
+      rpcReachable: Boolean(value.solana?.rpcReachable),
+      latestSlot: typeof value.solana?.latestSlot === 'number' ? value.solana.latestSlot : null,
+      programId: value.solana?.programId || '',
+      programDeployed: Boolean(value.solana?.programDeployed),
+      shopConfig: value.solana?.shopConfig || '',
+      shopConfigInitialized: Boolean(value.solana?.shopConfigInitialized),
+      gameAuthoritySecretPresent: Boolean(value.solana?.gameAuthoritySecretPresent),
+      gameAuthorityReady: Boolean(value.solana?.gameAuthorityReady),
+      playerProfileSyncReady: Boolean(value.solana?.playerProfileSyncReady),
+      providerError: value.solana?.providerError,
+      rpcError: value.solana?.rpcError,
+    },
+    timestamp: value.timestamp || new Date().toISOString(),
+  };
+}
+
 export interface WalletAuthHeaders {
   walletAddress: string;
   message: string;
   signature: string;
+}
+
+export interface AdminSession {
+  token: string;
+  walletAddress: string;
+  expiresAt: string;
+}
+
+export interface AdminOverviewResponse {
+  summary: {
+    users: number;
+    posts: number;
+    activeListings: number;
+    pendingTrades: number;
+  };
+  recentPosts: ForumPost[];
+  recentListings: MarketListing[];
+  recentTrades: Array<{
+    id: string;
+    listingId: string;
+    buyerWallet: string;
+    status: string;
+    createdAt: string;
+    marketMode?: string;
+    txSignature?: string | null;
+  }>;
+  tokenInfo: {
+    symbol: string;
+    name: string;
+    price: number;
+    totalSupply: number;
+    circulatingSupply: number;
+    lastUpdated: string;
+  } | null;
+  checkedAt: string;
+}
+
+export interface AdminUserRecord {
+  profile: User;
+  stats: {
+    level: number;
+    xp: number;
+    xpToNextLevel: number;
+    totalPosts: number;
+    totalItems: number;
+    totalTrades: number;
+    rewardDuanBalance: number;
+    rewardSolBalance: number;
+    rewardDuanEarned: number;
+    rewardSolEarned: number;
+    achievements: Array<{ id?: string; name?: string } | string>;
+  };
+}
+
+export interface AdminAuditLog {
+  id: string;
+  action: string;
+  walletAddress: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
 }
 
 function normalizeResponseAssets<T>(value: T): T {
@@ -50,11 +171,12 @@ class ApiService {
   private async request<T>(
     endpoint: string,
     options: RequestInit = {},
-    walletAuth?: WalletAuthHeaders
+    walletAuth?: WalletAuthHeaders,
+    adminToken?: string,
   ): Promise<ApiResponse<T>> {
     const configError = this.getConfigError();
     if (configError) {
-      console.error(`Supabase config error [${endpoint}]: ${configError}`);
+      reportEvent('error', `api:${endpoint}`, configError);
       return { success: false, error: configError };
     }
 
@@ -74,6 +196,11 @@ class ApiService {
                 'x-wallet-signature': walletAuth.signature,
               }
             : {}),
+          ...(adminToken
+            ? {
+                'x-admin-token': adminToken,
+              }
+            : {}),
           ...options.headers,
         },
       });
@@ -85,23 +212,24 @@ class ApiService {
         } catch {
           errorData = { error: `HTTP ${response.status}: ${response.statusText}` };
         }
-        console.error(`API Error [${endpoint}]:`, errorData);
+        reportEvent('error', `api:${endpoint}`, errorData.error || 'Bir hata olustu', JSON.stringify(errorData));
         return { success: false, error: errorData.error || 'Bir hata oluştu' };
       }
 
       const data = normalizeResponseAssets(await response.json() as T);
       return { success: true, data };
     } catch (error) {
-      console.error(`Network Error [${endpoint}]:`, error);
-      if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
-        console.error('Possible causes: Server offline, CORS issue, or network problem');
-      }
+      reportError(`api:${endpoint}`, error, 'Baglanti hatasi');
       return { success: false, error: 'Bağlantı hatası - Server çalışmıyor olabilir' };
     }
   }
 
-  async getHealth(): Promise<ApiResponse<{ status: string; service: string; env: Record<string, boolean> }>> {
+  async getHealth(): Promise<ApiResponse<ApiHealthResponse>> {
     return this.request(`/health`, { method: 'GET' });
+  }
+
+  async createAdminSession(walletAuth: WalletAuthHeaders): Promise<ApiResponse<AdminSession>> {
+    return this.request(`/admin/session`, { method: 'POST' }, walletAuth);
   }
 
   // Profile API
@@ -263,6 +391,12 @@ class ApiService {
     wantedItemName?: string;
     note?: string;
     duration: number; // hours
+    marketMode?: 'backend' | 'hybrid' | 'onchain';
+    onchainListingPda?: string;
+    onchainProgramId?: string;
+    txSignature?: string;
+    expiresAt?: string;
+    listingNonce?: string;
   }, walletAuth?: WalletAuthHeaders): Promise<ApiResponse<MarketListing>> {
     return this.request(`/market/listings`, {
       method: 'POST',
@@ -273,6 +407,10 @@ class ApiService {
   async createTradeOffer(listingId: string, walletAddress: string, data: {
     offeredItemId?: string;
     offeredTokenAmount?: number;
+    marketMode?: 'backend' | 'hybrid' | 'onchain';
+    onchainTradeIntentPda?: string;
+    onchainProgramId?: string;
+    txSignature?: string;
   }, walletAuth?: WalletAuthHeaders): Promise<ApiResponse<{ tradeId: string }>> {
     return this.request(`/market/listings/${listingId}/trade`, {
       method: 'POST',
@@ -334,6 +472,66 @@ class ApiService {
     lastUpdated: string;
   }>> {
     return this.request(`/token/info`, { method: 'GET' });
+  }
+
+  async getAdminOverview(adminToken: string): Promise<ApiResponse<AdminOverviewResponse>> {
+    return this.request(`/admin/overview`, { method: 'GET' }, undefined, adminToken);
+  }
+
+  async getAdminUsers(adminToken: string): Promise<ApiResponse<AdminUserRecord[]>> {
+    return this.request(`/admin/users`, { method: 'GET' }, undefined, adminToken);
+  }
+
+  async getAdminForumPosts(adminToken: string): Promise<ApiResponse<ForumPost[]>> {
+    return this.request(`/admin/forum/posts`, { method: 'GET' }, undefined, adminToken);
+  }
+
+  async adminDeletePost(postId: string, adminToken: string): Promise<ApiResponse<{ deleted: boolean }>> {
+    return this.request(`/admin/forum/posts/${postId}`, { method: 'DELETE' }, undefined, adminToken);
+  }
+
+  async getAdminForumComments(adminToken: string): Promise<ApiResponse<Array<ForumComment & { postTitle?: string }>>> {
+    return this.request(`/admin/forum/comments`, { method: 'GET' }, undefined, adminToken);
+  }
+
+  async adminDeleteComment(postId: string, commentId: string, adminToken: string): Promise<ApiResponse<{ deleted: boolean }>> {
+    return this.request(`/admin/forum/comments/${postId}/${commentId}`, { method: 'DELETE' }, undefined, adminToken);
+  }
+
+  async getAdminMarketListings(adminToken: string): Promise<ApiResponse<MarketListing[]>> {
+    return this.request(`/admin/market/listings`, { method: 'GET' }, undefined, adminToken);
+  }
+
+  async getAdminMarketTrades(adminToken: string): Promise<ApiResponse<Array<{
+    id: string;
+    listingId: string;
+    buyerWallet: string;
+    sellerWallet?: string;
+    status: string;
+    createdAt: string;
+    txSignature?: string | null;
+    marketMode?: string;
+  }>>> {
+    return this.request(`/admin/market/trades`, { method: 'GET' }, undefined, adminToken);
+  }
+
+  async adminCancelListing(listingId: string, adminToken: string): Promise<ApiResponse<{ cancelled: boolean }>> {
+    return this.request(`/admin/market/listings/${listingId}`, { method: 'DELETE' }, undefined, adminToken);
+  }
+
+  async adminUpdateTradeStatus(
+    tradeId: string,
+    status: 'pending' | 'accepted' | 'completed' | 'cancelled',
+    adminToken: string,
+  ): Promise<ApiResponse<{ updated: boolean; trade: unknown }>> {
+    return this.request(`/admin/market/trades/${tradeId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ status }),
+    }, undefined, adminToken);
+  }
+
+  async getAdminAuditLogs(adminToken: string): Promise<ApiResponse<AdminAuditLog[]>> {
+    return this.request(`/admin/audit-logs`, { method: 'GET' }, undefined, adminToken);
   }
 }
 

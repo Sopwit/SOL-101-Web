@@ -23,3 +23,4 @@ Pratik kurallar:
 - Bu klasor kaynak koddur, elle duzenlenebilir
 - On-chain veri kontrati degisirse frontend ve backend entegrasyonu birlikte gozden gecirilmelidir
 - PDA seed degisiklikleri dokumanda ve istemci kodunda ayni turde guncellenmelidir
+- Program deploy veya rebuild sonrasinda frontend IDL kopyasi `npm run solana:sync-idl` ile guncellenmelidir

@@ -6,19 +6,28 @@ import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
 import { enUS, tr as trLocale } from 'date-fns/locale';
 import { GlassCard } from '../components/GlassCard';
+import { EmptyStateCard, MaintenanceStateCard } from '../components/ModuleStateCard';
+import { NotificationRail } from '../components/NotificationRail';
+import { PageHero } from '../components/PageHero';
+import { PageShell } from '../components/PageShell';
 import { RarityBadge } from '../components/RarityBadge';
+import { SectionErrorBoundary } from '../components/SectionErrorBoundary';
+import { ImageWithFallback } from '../components/figma/ImageWithFallback';
 import { Button } from '../components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { Input } from '../components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { Skeleton } from '../components/ui/skeleton';
 import { useLanguage } from '../contexts/LanguageContext';
-import { fetchOnchainShopItems, purchaseOnchainShopItem } from '../lib/onchain/duanShopClient';
+import { fetchOnchainShopSnapshot, purchaseOnchainShopItem, type OnchainShopSnapshot } from '../lib/onchain/duanShopClient';
 import { pageDataCache } from '../lib/pageDataCache';
 import { localizeShopItem, normalizeShopSearch } from '../lib/shopItemLocalization';
 import { resolveAssetUrl } from '../lib/assetUrls';
+import { reportError } from '../lib/telemetry';
 import { useStore } from '../store';
 import { api } from '../services/api';
-import type { Rarity, ShopItem } from '../types';
+import { useAdminAccess } from '../hooks/useAdminAccess';
+import type { Rarity, ShopItem, SystemStatusItem } from '../types';
 import { duanToSol, formatDuanAmount, formatSolAmount } from '../../../shared/duanEconomy';
 
 interface TokenInfo {
@@ -32,6 +41,7 @@ export function ShopPage() {
   const { connection } = useConnection();
   const wallet = useWallet();
   const { connected, publicKey } = wallet;
+  const { isAdmin } = useAdminAccess();
   const { language, t } = useLanguage();
   const { tokenBalance } = useStore();
   const [items, setItems] = useState<ShopItem[]>(() => pageDataCache.shop.items);
@@ -43,8 +53,114 @@ export function ShopPage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isLoading, setIsLoading] = useState(() => pageDataCache.shop.items.length === 0);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [onchainSnapshot, setOnchainSnapshot] = useState<OnchainShopSnapshot | null>(null);
+  const [tokenInfoStatus, setTokenInfoStatus] = useState<SystemStatusItem | null>(null);
+  const [failedImageIds, setFailedImageIds] = useState<string[]>([]);
   const [now, setNow] = useState(Date.now());
+  const [statusCheckedAt, setStatusCheckedAt] = useState<string | null>(null);
   const loadRequestIdRef = useRef(0);
+  const endpointLabel = useMemo(() => connection.rpcEndpoint.replace(/^https?:\/\//, ''), [connection.rpcEndpoint]);
+  const currentItemsRef = useRef(items);
+
+  useEffect(() => {
+    currentItemsRef.current = items;
+  }, [items]);
+
+  const buildSourceMessage = (source: 'backend' | 'assets' | 'onchain', message: string) => {
+    if (language === 'tr') {
+      return message;
+    }
+
+    const fallbackMap = {
+      backend: 'Backend service is degraded or unreachable.',
+      assets: 'Some visual assets could not be loaded.',
+      onchain: 'On-chain shop data is unavailable.',
+    } as const;
+
+    return fallbackMap[source];
+  };
+
+  const loadTokenInfo = async (requestId: number) => {
+    const response = await api.getTokenInfo();
+    if (requestId !== loadRequestIdRef.current) {
+      return;
+    }
+
+    if (response.success && response.data) {
+      setTokenInfo(response.data);
+      setTokenInfoStatus({
+        id: 'shop-backend-token',
+        source: 'backend',
+        state: 'healthy',
+        severity: 'info',
+        title: 'Backend Token Feed',
+        detail: language === 'tr'
+          ? 'Token fiyat ve supply bilgisi backend servisinden guncel aliniyor.'
+          : 'Token price and supply are loading correctly from the backend service.',
+      });
+      pageDataCache.shop.tokenInfo = response.data;
+      return;
+    }
+
+    setTokenInfoStatus({
+      id: 'shop-backend-token',
+      source: 'backend',
+      state: 'degraded',
+      severity: 'warning',
+      title: 'Backend Token Feed',
+      detail: response.error || buildSourceMessage('backend', 'Backend token servisi cevap vermiyor. Magaza itemleri acilabilir ancak token ozeti guncel degil.'),
+    });
+  };
+
+  const readSnapshot = async () => {
+    const firstSnapshot = await Promise.race([
+      fetchOnchainShopSnapshot(connection),
+      new Promise<OnchainShopSnapshot>((resolve) => {
+        window.setTimeout(() => {
+          resolve({
+            items: [],
+            status: 'offline',
+            code: 'rpc_unreachable',
+            message: language === 'tr'
+              ? 'On-chain shop istegi zaman asimina ugradi. RPC gec cevap veriyor veya baglanti kopuk.'
+              : 'The on-chain shop request timed out. RPC is slow or unavailable.',
+            missingItemIds: [],
+          });
+        }, 4500);
+      }),
+    ]);
+
+    if (firstSnapshot.status === 'healthy') {
+      return firstSnapshot;
+    }
+
+    try {
+      await new Promise((resolve) => window.setTimeout(resolve, 900));
+      const retrySnapshot = await fetchOnchainShopSnapshot(connection);
+
+      if (retrySnapshot.status === 'healthy') {
+        return retrySnapshot;
+      }
+
+      if (firstSnapshot.status === 'healthy') {
+        return firstSnapshot;
+      }
+
+      if (firstSnapshot.code !== retrySnapshot.code) {
+        return {
+          ...retrySnapshot,
+          status: 'degraded',
+          message: language === 'tr'
+            ? `On-chain durum degisti, sistem yeniden kontrol edildi. Son durum: ${retrySnapshot.message}`
+            : `On-chain status changed while rechecking. Latest result: ${retrySnapshot.message}`,
+        };
+      }
+
+      return retrySnapshot;
+    } catch {
+      return firstSnapshot;
+    }
+  };
 
   const loadItems = async (options?: { silent?: boolean }) => {
     const requestId = ++loadRequestIdRef.current;
@@ -55,32 +171,42 @@ export function ShopPage() {
 
     try {
       setLoadError(null);
-      const [tokenResponse, onchainItems] = await Promise.all([
-        api.getTokenInfo(),
-        Promise.race([
-          fetchOnchainShopItems(connection),
-          new Promise<ShopItem[]>((_, reject) => {
-            window.setTimeout(() => reject(new Error('On-chain shop request timed out')), 4000);
-          }),
-        ]),
-      ]);
+      void loadTokenInfo(requestId);
+      const snapshot = await readSnapshot();
 
       if (requestId !== loadRequestIdRef.current) return;
 
-      setItems(onchainItems);
-      const nextTokenInfo = tokenResponse.success && tokenResponse.data ? tokenResponse.data : null;
-      setTokenInfo(nextTokenInfo);
-      pageDataCache.shop.items = onchainItems;
-      pageDataCache.shop.tokenInfo = nextTokenInfo;
+      setOnchainSnapshot(snapshot);
+      setStatusCheckedAt(new Date().toLocaleTimeString(language === 'tr' ? 'tr-TR' : 'en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      }));
+
+      if (snapshot.items.length > 0) {
+        setItems(snapshot.items);
+        pageDataCache.shop.items = snapshot.items;
+      } else if (!silent && pageDataCache.shop.items.length === 0) {
+        setItems([]);
+        pageDataCache.shop.items = [];
+      }
+
+      if (snapshot.status === 'offline' && currentItemsRef.current.length === 0) {
+        setLoadError(snapshot.message);
+      } else {
+        setLoadError(null);
+      }
+
+      pageDataCache.shop.usingFallbackCatalog = false;
     } catch (error) {
-      console.error('Error loading shop items:', error);
+      reportError('shop:load', error, 'Magaza itemleri yuklenemedi');
       if (requestId !== loadRequestIdRef.current) return;
       const message = error instanceof Error ? error.message : t('common.error');
       setLoadError(message);
-      toast.error(message);
-      setItems([]);
-      pageDataCache.shop.items = [];
-      pageDataCache.shop.usingFallbackCatalog = false;
+      if (!silent && pageDataCache.shop.items.length === 0) {
+        setItems([]);
+        pageDataCache.shop.items = [];
+      }
     } finally {
       if (requestId === loadRequestIdRef.current && !silent) {
         setIsLoading(false);
@@ -96,12 +222,19 @@ export function ShopPage() {
     const interval = window.setInterval(() => {
       setNow(Date.now());
       void loadItems({ silent: true });
-    }, 30000);
+    }, 15000);
 
     return () => window.clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    const handleFocus = () => { void loadItems({ silent: true }); };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, []);
+
   const locale = language === 'tr' ? trLocale : enUS;
+  const failedImageCount = failedImageIds.length;
   const localizedItems = items.map((item) => localizeShopItem(item, language));
   const normalizedSearchQuery = normalizeShopSearch(searchQuery);
   const rarityFilteredItems = rarityFilter === 'all'
@@ -117,9 +250,69 @@ export function ShopPage() {
     () => (selectedItem ? localizeShopItem(selectedItem, language) : null),
     [selectedItem, language]
   );
+  const missingImageMetadataCount = localizedItems.filter((item) => !item.imageUrl).length;
+
+  const systemStatuses = useMemo<SystemStatusItem[]>(() => {
+    const statuses: SystemStatusItem[] = [];
+
+    if (onchainSnapshot) {
+      statuses.push({
+        id: 'shop-onchain',
+        source: 'onchain',
+        state: onchainSnapshot.status,
+        severity: onchainSnapshot.status === 'healthy' ? 'info' : onchainSnapshot.status === 'degraded' ? 'warning' : 'error',
+        title: 'On-Chain Catalog',
+        detail: onchainSnapshot.message,
+        checkedAt: statusCheckedAt || undefined,
+        context: endpointLabel,
+      });
+    }
+
+    if (tokenInfoStatus) {
+      statuses.push(tokenInfoStatus);
+    }
+
+    if (missingImageMetadataCount > 0 || failedImageCount > 0) {
+      const parts = [
+        missingImageMetadataCount > 0 ? `${missingImageMetadataCount} item metadata gorseli eksik.` : null,
+        failedImageCount > 0 ? `${failedImageCount} gorsel dosyasi yuklenemedi.` : null,
+      ].filter(Boolean);
+
+      statuses.push({
+        id: 'shop-assets',
+        source: 'assets',
+        state: 'degraded',
+        severity: 'warning',
+        title: 'Asset Sync',
+        detail: parts.join(' ') || buildSourceMessage('assets', 'Bazi gorseller yuklenemedi.'),
+        checkedAt: statusCheckedAt || undefined,
+      });
+    } else if (localizedItems.length > 0) {
+      statuses.push({
+        id: 'shop-assets',
+        source: 'assets',
+        state: 'healthy',
+        severity: 'info',
+        title: 'Asset Sync',
+        detail: language === 'tr'
+          ? 'Magaza gorselleri ve PNG assetleri normal gorunuyor.'
+          : 'Shop images and PNG assets are rendering correctly.',
+        checkedAt: statusCheckedAt || undefined,
+      });
+    }
+
+    return statuses;
+  }, [endpointLabel, failedImageCount, language, localizedItems.length, missingImageMetadataCount, onchainSnapshot, statusCheckedAt, tokenInfoStatus]);
+  const sectionOffline = Boolean(
+    onchainSnapshot &&
+    onchainSnapshot.status === 'offline' &&
+    onchainSnapshot.code !== 'program_missing' &&
+    items.length === 0
+  );
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
+    setFailedImageIds([]);
     await loadItems();
     setIsRefreshing(false);
   };
@@ -146,7 +339,7 @@ export function ShopPage() {
       setPurchaseDialogOpen(false);
       await loadItems();
     } catch (error) {
-      console.error('On-chain purchase failed:', error);
+      reportError('shop:purchase', error, 'On-chain satin alim basarisiz');
       toast.error(error instanceof Error ? error.message : t('common.error'));
     }
   };
@@ -171,20 +364,55 @@ export function ShopPage() {
     return `${t('shop.restocking')} • ${formatDistanceToNow(restockAt, { addSuffix: false, locale })}`;
   };
 
-  return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="flex items-start justify-between mb-8">
-        <div>
-          <h1 className="text-4xl font-bold mb-2">{t('shop.title')}</h1>
-          <p className="text-muted-foreground">{t('shop.subtitle')}</p>
-        </div>
-        <Button variant="outline" className="gap-2" onClick={handleRefresh} disabled={isRefreshing}>
-          <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-          {t('common.refresh')}
-        </Button>
-      </div>
+  const registerImageFailure = (itemId: string) => {
+    setFailedImageIds((current) => (current.includes(itemId) ? current : [...current, itemId]));
+  };
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+  const renderLoadingSkeleton = () => (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+      {Array.from({ length: 6 }).map((_, index) => (
+        <GlassCard key={`shop-skeleton-${index}`} className="overflow-hidden border border-border/40">
+          <Skeleton className="aspect-square w-full rounded-none" />
+          <div className="space-y-4 p-4">
+            <Skeleton className="h-6 w-2/3" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-4/5" />
+            <Skeleton className="h-10 w-full rounded-xl" />
+          </div>
+        </GlassCard>
+      ))}
+    </div>
+  );
+
+  return (
+    <SectionErrorBoundary
+      title="Magaza modulu gecici olarak kapanmis durumda"
+      description="Bu bolum render edilirken beklenmeyen bir hata olustu. Uygulamanin geri kalani acik kalir; magaza bolumunu yeniden deneyebilirsin."
+    >
+      <PageShell
+        hero={(
+          <PageHero
+            eyebrow="ON-CHAIN SHOP"
+            title={t('shop.title')}
+            description={t('shop.subtitle')}
+            accent="from-cyan-400/15 via-sky-300/10 to-emerald-300/20"
+            panelTitle="LIVE INVENTORY"
+            panelBody="Fiyat, stok ve restock verisi on-chain hesaplardan okunur. Gorseller yerel katalog ile esitlenir."
+            metrics={[
+              { label: 'Catalog', value: `${items.length}` },
+              { label: 'Visible', value: `${filteredItems.length}` },
+              { label: 'DUAN', value: `${Math.round(tokenBalance)}` },
+            ]}
+            actions={(
+              <Button variant="outline" className="gap-2" onClick={handleRefresh} disabled={isRefreshing}>
+                <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                {t('common.refresh')}
+              </Button>
+            )}
+          />
+        )}
+      >
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
         <GlassCard className="p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -213,41 +441,57 @@ export function ShopPage() {
         )}
       </div>
 
-      <div className="flex flex-col md:flex-row gap-4 mb-8">
-        <Input placeholder={t('shop.searchPlaceholder')} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="flex-1" />
-        <Button variant="outline" onClick={() => void loadItems()}>{t('common.search')}</Button>
-        <Select value={rarityFilter} onValueChange={setRarityFilter}>
-          <SelectTrigger className="w-full md:w-[200px]"><SelectValue placeholder={t('shop.rarity')} /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{t('common.all')}</SelectItem>
-            <SelectItem value="common">{t('rarity.common')}</SelectItem>
-            <SelectItem value="rare">{t('rarity.rare')}</SelectItem>
-            <SelectItem value="epic">{t('rarity.epic')}</SelectItem>
-            <SelectItem value="legendary">{t('rarity.legendary')}</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+      <GlassCard className="p-5 md:p-6">
+        <div className="grid gap-4 xl:grid-cols-[1fr_auto_auto] xl:items-center">
+          <Input placeholder={t('shop.searchPlaceholder')} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="flex-1" />
+          <Select value={rarityFilter} onValueChange={setRarityFilter}>
+            <SelectTrigger className="w-full xl:w-[220px]"><SelectValue placeholder={t('shop.rarity')} /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t('common.all')}</SelectItem>
+              <SelectItem value="common">{t('rarity.common')}</SelectItem>
+              <SelectItem value="rare">{t('rarity.rare')}</SelectItem>
+              <SelectItem value="epic">{t('rarity.epic')}</SelectItem>
+              <SelectItem value="legendary">{t('rarity.legendary')}</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button variant="outline" onClick={() => void loadItems()} className="xl:min-w-36">{t('common.search')}</Button>
+        </div>
+      </GlassCard>
 
       {isLoading ? (
-        <GlassCard className="p-12 text-center">{t('common.loading')}</GlassCard>
+        renderLoadingSkeleton()
+      ) : sectionOffline ? (
+        <MaintenanceStateCard
+          title={language === 'tr' ? 'Magaza Alani Kapali' : 'Shop Section Offline'}
+          description={loadError || buildSourceMessage('onchain', 'Magaza verisi su an acilamiyor. On-chain shop hesabi veya RPC tarafini kontrol edin.')}
+          onAction={handleRefresh}
+        />
       ) : loadError ? (
-        <GlassCard className="p-12 text-center">
-          <h3 className="text-xl font-bold mb-2">{t('common.error')}</h3>
-          <p className="text-muted-foreground">{loadError}</p>
-        </GlassCard>
+        <MaintenanceStateCard
+          title={t('common.error')}
+          description={loadError}
+          onAction={handleRefresh}
+        />
       ) : filteredItems.length === 0 ? (
-        <GlassCard className="p-12 text-center">
-          <ShoppingCart className="w-14 h-14 mx-auto mb-4 text-muted-foreground" />
-          <h3 className="text-xl font-bold mb-2">{t('shop.emptyTitle')}</h3>
-          <p className="text-muted-foreground">{t('shop.emptyDesc')}</p>
-        </GlassCard>
+        <EmptyStateCard
+          title={t('shop.emptyTitle')}
+          description={t('shop.emptyDesc')}
+          icon={ShoppingCart}
+        />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredItems.map((item, index) => (
             <motion.div key={item.id} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: index * 0.05, duration: 0.3 }}>
               <GlassCard hover className={`overflow-hidden h-full flex flex-col border-2 ${getRarityBorderClass(item.rarity)} cursor-pointer`} onClick={() => handlePurchase(item)}>
                 <div className="aspect-square overflow-hidden relative group">
-                  <img src={resolveAssetUrl(item.imageUrl)} alt={item.name} className="w-full h-full object-cover transition-transform group-hover:scale-110" />
+                  <ImageWithFallback
+                    src={resolveAssetUrl(item.imageUrl)}
+                    alt={item.name}
+                    className="w-full h-full object-cover transition-transform group-hover:scale-110"
+                    loading={index < 6 ? 'eager' : 'lazy'}
+                    decoding="async"
+                    onFallback={() => registerImageFailure(item.id)}
+                  />
                   <div className="absolute top-2 right-2">
                     <RarityBadge rarity={item.rarity} />
                   </div>
@@ -294,10 +538,12 @@ export function ShopPage() {
           {selectedItem && localizedSelectedItem && (
             <div className="space-y-4">
               <div className="flex justify-center rounded-lg bg-muted/20 p-4">
-                <img
+                <ImageWithFallback
                   src={resolveAssetUrl(localizedSelectedItem.imageUrl)}
                   alt={localizedSelectedItem.name}
                   className="h-48 w-auto max-w-full object-contain"
+                  decoding="async"
+                  onFallback={() => registerImageFailure(localizedSelectedItem.id)}
                 />
               </div>
               <div>
@@ -330,6 +576,18 @@ export function ShopPage() {
           )}
         </DialogContent>
       </Dialog>
-    </div>
+      </PageShell>
+      {isAdmin && systemStatuses.length > 0 && (
+        <NotificationRail
+          title="Magaza Durum Merkezi"
+          description="Burada shop tarafindaki on-chain, backend ve asset saglik durumlarini ayri ayri gorebilirsin."
+          triggerLabel="Shop Status"
+          items={systemStatuses.map((status) => ({
+            ...status,
+            detail: status.state === 'healthy' ? status.detail : status.detail,
+          }))}
+        />
+      )}
+    </SectionErrorBoundary>
   );
 }

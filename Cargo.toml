@@ -2,6 +2,7 @@
 # Rust/Anchor workspace koku. On-chain programlar burada bir araya gelir.
 members = [
   "programs/duan_shop",
+  "programs/duan_market",
 ]
 resolver = "2"
 

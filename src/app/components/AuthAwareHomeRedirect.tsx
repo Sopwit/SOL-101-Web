@@ -1,6 +1,5 @@
 import { useWallet } from '@solana/wallet-adapter-react';
 import { Navigate } from 'react-router';
-import { HomePage } from '../pages/HomePage';
 
 export function AuthAwareHomeRedirect() {
   const { connected } = useWallet();
@@ -9,5 +8,5 @@ export function AuthAwareHomeRedirect() {
     return <Navigate to="/shop" replace />;
   }
 
-  return <HomePage />;
+  return <Navigate to="/home" replace />;
 }

@@ -13,8 +13,8 @@ export function GlassCard({ children, className, hover = false, onClick }: Glass
     <div
       onClick={onClick}
       className={cn(
-        'rounded-xl border border-border/40 bg-card/50 backdrop-blur-sm',
-        hover && 'transition-all duration-300 hover:border-primary/50 hover:shadow-lg hover:shadow-primary/10 hover:-translate-y-1',
+        'rounded-[1.75rem] border border-border/50 bg-card/74 shadow-[0_22px_70px_-28px_rgba(15,23,42,0.36)] backdrop-blur-xl',
+        hover && 'transition-all duration-300 hover:-translate-y-1 hover:border-primary/40 hover:shadow-[0_24px_80px_-28px_rgba(34,197,94,0.28)]',
         className
       )}
     >

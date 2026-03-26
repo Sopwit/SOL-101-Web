@@ -1,12 +1,14 @@
 import type { WalletContextState } from '@solana/wallet-adapter-react';
 import { toast } from 'sonner';
 import type { WalletAuthHeaders } from '../services/api';
+import { reportError, reportEvent } from './telemetry';
 
 export async function createWalletAuth(
   wallet: Pick<WalletContextState, 'publicKey' | 'signMessage'>,
   action: string
 ): Promise<WalletAuthHeaders | null> {
   if (!wallet.publicKey || !wallet.signMessage) {
+    reportEvent('warning', 'wallet-auth', 'Wallet imzalama desteklenmiyor');
     toast.error('Wallet imzalama desteklenmiyor');
     return null;
   }
@@ -28,7 +30,8 @@ export async function createWalletAuth(
       message,
       signature: btoa(binary),
     };
-  } catch {
+  } catch (error) {
+    reportError('wallet-auth', error, 'Imza islemi basarisiz');
     toast.error('Imza islemi iptal edildi veya basarisiz oldu');
     return null;
   }
