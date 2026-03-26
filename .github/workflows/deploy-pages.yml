@@ -41,6 +41,10 @@ jobs:
     - name: Build site for Pages
       env:
         VITE_ROUTER_MODE: hash
+        VITE_SUPABASE_PROJECT_ID: ${{ vars.VITE_SUPABASE_PROJECT_ID }}
+        VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        VITE_SOLANA_CLUSTER: ${{ vars.VITE_SOLANA_CLUSTER }}
+        VITE_SOLANA_RPC_URL: ${{ vars.VITE_SOLANA_RPC_URL }}
       run: npm run build
 
     - name: Upload artifact
