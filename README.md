@@ -302,3 +302,25 @@ dogrular.
 - [Oyun entegrasyonu](./docs/GAME_INTEGRATION.md)
 - [Proje gelistirme rehberi](./docs/Guidelines.md)
 - [Atiflar](./docs/ATTRIBUTIONS.md)
+
+## GitHub Pages Deploy
+
+Bu repo GitHub Pages icin hash router ile deploy edilecek sekilde hazirlandi. `main` veya `master` branch'ine push edildiginde [`.github/workflows/deploy-pages.yml`](./.github/workflows/deploy-pages.yml) workflow'u `dist/` artefact'ini Pages'e yukler.
+
+Beklenen yayin adresi:
+
+```text
+https://sopwit.github.io/SOL-101-Web/
+```
+
+Unity `DuanApiConfig` icin bridge adresi:
+
+```text
+https://sopwit.github.io/SOL-101-Web/#/wallet-bridge
+```
+
+Unity callback adresi:
+
+```text
+sol101unity://wallet-bridge
+```

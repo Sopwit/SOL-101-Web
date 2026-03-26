@@ -1,4 +1,4 @@
-import { createBrowserRouter } from 'react-router';
+import { createBrowserRouter, createHashRouter } from 'react-router';
 import { Layout } from './Layout';
 import { AuthAwareHomeRedirect } from './components/AuthAwareHomeRedirect';
 import { AppErrorPage } from './pages/AppErrorPage';
@@ -9,7 +9,7 @@ import { ProfilePage } from './pages/ProfilePage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { WalletBridgePage } from './pages/WalletBridgePage';
 
-export const router = createBrowserRouter([
+const routes = [
   {
     path: '/wallet-bridge',
     Component: WalletBridgePage,
@@ -28,4 +28,10 @@ export const router = createBrowserRouter([
       { path: '*', Component: NotFoundPage },
     ],
   },
-]);
+];
+
+const routerFactory = import.meta.env.VITE_ROUTER_MODE === 'hash'
+  ? createHashRouter
+  : createBrowserRouter;
+
+export const router = routerFactory(routes);
