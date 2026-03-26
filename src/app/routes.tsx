@@ -7,8 +7,14 @@ import { ShopPage } from './pages/ShopPage';
 import { MarketPage } from './pages/MarketPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { NotFoundPage } from './pages/NotFoundPage';
+import { WalletBridgePage } from './pages/WalletBridgePage';
 
 export const router = createBrowserRouter([
+  {
+    path: '/wallet-bridge',
+    Component: WalletBridgePage,
+    errorElement: <AppErrorPage />,
+  },
   {
     path: '/',
     Component: Layout,
