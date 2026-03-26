@@ -1,334 +1,245 @@
 # DUAN Web
 
-DUAN-GAME etrafinda kurgulanmis bu web uygulamasi; Solana tabanli topluluk, envanter ve ticaret akislarini tek bir yerde toplar. Bu repo; React tabanli istemciyi ve Supabase Edge Functions uzerinde calisan hafif backend katmanini birlikte barindirir. Hedef mimari, Unity istemcisi ile tam entegre, dusuk gecikmeli ve veri tutarliligi yuksek bir deneyim sunmaktir.
+Canli uygulama:
 
-## Proje Durumu
+- https://sopwit.github.io/SOL-101-Web/
 
-Proje ilk mock asamasini gecmis durumda. Uygulama artik:
+DUAN Web, Unity tabanli oyun akisini destekleyen Solana odakli bir web platformudur. Proje; oyuncu profili, forum, magazа, pazar, admin paneli ve backend operasyon katmanini tek repoda toplar. Frontend React/Vite ile, backend ise Supabase Edge Functions + Hono ile calisir.
 
-- Solana cuzdan baglantisini destekler
-- Supabase Edge Functions uzerinden veri okuma/yazma yapar
-- Profil, forum, shop, market ve oyun entegrasyonu endpoint'lerine sahiptir
-- Bazi ekranlarda halen mock veri veya UI-only akis kullanir
+## Guncel Durum
 
-Bu nedenle repo hem "canli entegrasyon" hem de "ileride tamamlanacak UI akislari" icerir.
+Bu repo artik ilk mock asamasinin otesindedir. Uygulama su anda:
 
-## Moduller
+- devnet odakli Solana baglantisi kullanir
+- GitHub Pages uzerinden yayinlanabilir
+- on-chain shop katalogu ve sahiplik verisini okuyabilir
+- backend uzerinden forum, profil, market mirror ve admin operasyonlarini yonetebilir
+- Unity ile ortak veri modeli mantigina gore ilerler
 
-### Ana Sayfa
-- Platform istatistiklerini backend'den ceker
-- Forum, Shop, Market ve Profil modullerine yonlendirir
-- Istatistikler 30 saniyede bir yenilenir
+Not:
+
+- Bu proje su an `mainnet` hedeflemez
+- ana operasyon ortami `devnet`tir
+- market settlement tarafinda Anchor program katmani baslamis olsa da tum akislar tamamen on-chain degildir
+
+## Ana Moduller
+
+### Home
+
+- platform ozeti sunar
+- toplam oyuncu profili, cevrimici oyuncu, toplam item ve tamamlanan takas metriklerini gosterir
+- token ekonomisi, runtime sagligi ve katalog ozeti verir
+- veri 30 saniyelik polling ile yenilenir
 
 ### Forum
-- Post listeleme, filtreleme ve siralama desteklenir
-- Yeni post olusturma backend'e yazilir
-- Like/unlike islemleri backend ile calisir
-- UI tarafinda gorsel yukleme alani bulunur ancak dosya yukleme akisi henuz bagli degildir
+
+- backend tabanli gonderi akisi
+- yorumlar, begeni ve temel moderasyon aksiyonlari
+- opsiyonel gorsel URL destegi
+- dil ve feed filtreleme
 
 ### Shop
-- Token bilgisi backend'den alinabilir
-- Item listeleme ve satin alma akislarinin ana yolu on-chain shop hesaplari uzerinden ilerler
-- SPL token mint adresi tanimlanirsa wallet token bakiyesi zincirden okunur
-- Token mint adresi yoksa uygulama token bakiyesini `0` gosterir
+
+- on-chain shop snapshot uzerinden item listesi
+- backend token ozeti
+- asset fallback sistemi
+- kaynak bazli durum sinyalleri
+- satin alma akislarinda Anchor tabanli shop mantigi
 
 ### Market
-- Market endpoint'leri backend tarafinda mevcut
-- Listeleme backend verisi ile calisir
-- Listing ve trade akislari Supabase Edge Function uzerinden ilerler
-- Icerik olusturma akislarinda wallet auth kullanilir
 
-### Profil
-- Wallet baglantisi sonrasinda profil ve istatistikler backend'den cekilir
-- Profil guncelleme imzali istek ile backend'e yazilir
-- Envanter sekmesi on-chain owned item hesaplari ile calisir
-- Post ve listing sekmeleri sadeleştirilmistir; bu veriler yeniden eklenecekse backend kaynakli tasarlanmalidir
+- backend mirror ile calisan listing/trade akisi
+- `duan_market` on-chain katmani icin istemci ve program iskeleti
+- admin tarafinda trade ve listing kontrolu
 
-### Oyun Entegrasyonu
-- Unity istemcisi ile tam entegre calisacak sekilde kurgulanmistir
-- Oyun tarafindan profil/stats senkronizasyonu yapilabilir
-- Oyun event'leri backend'e yazilabilir
-- Hedef, web ve Unity tarafinin ayni oyuncu verisini es zamanli veya yakin-gercek-zamanli guncellemesidir
-- Bu katman `docs/GAME_INTEGRATION.md` icinde ayrintili olarak anlatilir
+### Profile
 
-## Unity Entegrasyon Hedefi
+- backend profil verisi
+- on-chain `player-profile` ve `owned-item` okuma
+- inventory, progression ve kozmetik yapisi
 
-Bu proje genel bir "oyun baglantisi" katmanindan ziyade Unity ile dogrudan entegre calisacak sekilde gelistirilmektedir.
+### Admin Panel
 
-Hedef davranis:
-
-- Unity istemcisi oyuncu ilerlemesini ve event'lerini DUAN backend'ine gonderecek
-- Web paneli ayni oyuncunun envanter, profil, trade ve achievement durumunu yansitacak
-- Kritik veri modelleri iki tarafta ortak sema mantigi ile ilerleyecek
-- Senkronizasyon mumkun oldugunca dusuk gecikmeli olacak
-- Cift tarafli veri tutarliligi icin auth, idempotency ve event-duzeni kurallari netlestirilecek
-
-Mevcut durum:
-
-- HTTP tabanli sync ve event endpoint'leri mevcut
-- Unity tarafi icin temel entegrasyon dokumani mevcut
-- Tam gercek zamanli transport katmani ve veri normalizasyonu henuz tamamlanmamis
-
-## Iki Repo Mimarisi
-
-Sistem iki ayri repo ile birlikte calisacak:
-
-- Web repo: bu repo
-- Unity repo: `https://github.com/Sopwit/SOL-101-Unity`
-
-Sorumluluk ayrimi:
-
-- Unity oyunun oynandigi ana istemci olacak
-- Web uygulamasi oyuncunun hesap, profil, forum, inventory, market ve sosyal akislarini gosterecek
-- Oyuncu ilerlemesi Unity tarafinda uretilecek
-- Inventory, profil, achievement, trade ve topluluk verileri web/backend tarafinda saklanacak veya orkestra edilecek
-
-Pratikte bu su anlama gelir:
-
-- Oyuncu oyunu Unity uzerinden oynar
-- Kazanilan item, XP, achievement ve event'ler backend'e aktarilir
-- Web paneli ayni kullanicinin envanterini, profilini ve sosyal etkilesimlerini gosterir
-- Her iki istemci ayni wallet veya oyuncu kimligi etrafinda baglanir
-
-## Source Of Truth
-
-Hedef mimaride veri sahipligi net olmalidir:
-
-- Unity: gameplay state, combat olaylari, loot kazanimi, checkpoint event'leri
-- Web/backend: profil, inventory kaydi, forum, market, token bilgisi, oyuncu istatistiklerinin paylasilan gorunumu
-
-Unity bir item kazandiginda bunu dogrudan lokal tek kaynak gibi tutmak yerine backend'e yazmali; web de ayni kaynagi okumali. Boylece iki taraf birbirinden kopmaz.
+- wallet allowlist ile korunan ayri yonetim alani
+- admin session token mantigi
+- overview, system, economy, users ve moderation sekmeleri
+- audit log, yorum/gonderi silme, listing iptali, trade durumu guncelleme
 
 ## Mimari Ozet
 
 ### Frontend
+
 - React 18
 - TypeScript
 - Vite
 - React Router
 - Tailwind CSS
-- shadcn/ui ve Radix UI bilesenleri
+- shadcn/ui + Radix UI
 - Zustand
-- next-themes
-- Solana wallet adapter
+- Solana Wallet Adapter
 
 ### Backend
+
 - Supabase Edge Functions
 - Hono
-- Supabase KV benzeri saklama katmani (`functions/server/kv_store.tsx`)
-- TweetNaCl ile mesaj imza dogrulama
+- Supabase tabanli KV store
+- wallet signature dogrulama
+- admin session token mekanizmasi
 
-## Dizin Yapisi
+### Solana
+
+- Anchor workspace
+- `duan_shop`
+- `duan_market`
+- IDL sync scriptleri
+- devnet deploy akisi
+
+### Unity Entegrasyonu
+
+Unity repo:
+
+- https://github.com/Sopwit/SOL-101-Unity
+
+Hedef model:
+
+- Unity gameplay state uretir
+- web profil, sosyal akis ve ekonomi tarafini gosterir
+- backend ve Solana, iki istemci arasinda ortak veri omurgasi olur
+
+## Source Of Truth
+
+Pratikte veri sahipligi su sekilde ilerler:
+
+- Unity: gameplay, event, loot ve progression tetikleyicileri
+- Web/backend: profil, forum, market mirror, admin operasyonlari
+- Solana: shop katalogu, satin alma, owned item ve ilgili on-chain state
+
+Bu ayrim tam bitmis degil ama proje genelinde bu yone dogru ilerleniyor.
+
+## Klasor Ozetleri
 
 ```text
-src/
-  app/
-    components/     UI ve ortak bilesenler
-    contexts/       Dil ve benzeri context yapilari
-    hooks/          Balance gibi uygulama hook'lari
-    lib/            Mock veri ve yardimci kaynaklar
-    pages/          Route seviyesindeki ekranlar
-    services/       API istemcisi
-functions/
-  server/
-    index.tsx       Edge function route'lari
-    kv_store.tsx    Sunucu veri erisim katmani
-docs/
-  GAME_INTEGRATION.md
-  Guidelines.md
-  ATTRIBUTIONS.md
-  REPO_STRUCTURE_TR.md
-  SMOKE_TEST_TR.md
-  setup/
-    SUPABASE_SETUP.md
-    SOLANA_SETUP.md
+src/app/                Uygulama ekranlari, hook'lar, servisler ve ortak bilesenler
+functions/server/       Supabase Edge Function giris noktasi ve KV katmani
+shared/                 Frontend ve backend tarafinin ortak kullandigi sabitler
+programs/               Anchor programlari
+scripts/                Solana build/sync yardimci komutlari
+docs/                   Kurulum, mimari ve operasyon dokumani
+tests/                  Smoke testler
 ```
 
-## Ozel Klasorler ve Veri Yollari
+Kritik giris noktalar:
 
-Bu repoda her klasor ayni tipte degildir. Gelistirme yaparken su ayrimi koruyun:
-
-- `.github/`: CI ve depo otomasyonlari. Kaynak dosyadir, duzenlenebilir.
-- `.vite/`: Vite tarafindan uretilen gelistirme cache'i. Kaynak dosya degildir, elle duzenlenmemelidir.
-- `dist/`: `npm run build` sonrasi uretilen production ciktilari. Kaynak dosya degildir, tekrar uretilebilir.
-- `docs/`: urun, kurulum ve mimari belgeleri. Kaynak dosyadir, kodla birlikte guncel tutulmalidir.
-- `functions/server/`: Supabase Edge Function kaynagi. Veri yazma/okuma ve wallet auth burada merkezilesir.
-- `shared/`: frontend ve backend tarafinin ortak kullandigi ekonomik sabitler, kataloglar ve semalar.
-
-Temel veri yolları:
-
-- Frontend API istemcisi: `src/app/services/api.ts`
-- Edge Function giris noktasi: `functions/server/index.tsx`
-- KV erisim katmani: `functions/server/kv_store.tsx`
-- Shop katalog ve ekonomi sabitleri: `shared/shopCatalog.ts`, `shared/duanEconomy.ts`
-- Profil kozmetikleri: `shared/profileCosmetics.ts`
-
-Not:
-
-- `.vite/` ve `dist/` klasorleri repoda referans icin gorunse bile el ile guncellenmez.
-- Temizlik gerekiyorsa `npm run clean` kullanilabilir.
+- `src/app/services/api.ts`
+- `functions/server/index.tsx`
+- `shared/shopCatalog.ts`
+- `shared/duanEconomy.ts`
+- `programs/duan_shop/src/lib.rs`
+- `programs/duan_market/src/lib.rs`
 
 ## Calistirma
 
 ### Gereksinimler
+
 - Node.js 18+
 - npm
 - Supabase projesi
-- Solana test cuzdani, tercihen Phantom
+- devnet Solana cuzdani
+- tercihen Phantom
 
-### Environment degiskenleri
-
-Ornek degiskenler icin [`.env.example`](./.env.example) dosyasini baz alin.
-
-Frontend `.env` dosyaniza en az su degerleri eklenmelidir:
-
-```bash
-VITE_SUPABASE_PROJECT_ID=your-project-id
-VITE_SUPABASE_ANON_KEY=your-anon-key
-VITE_SOLANA_CLUSTER=devnet
-VITE_SOLANA_RPC_URL=https://api.devnet.solana.com
-VITE_SOLANA_TOKEN_MINT=your-spl-token-mint-address
-DUAN_SHOP_PROGRAM_ID=your-anchor-program-id
-DUAN_SHOP_TREASURY=your-treasury-wallet-address
-DUAN_SHOP_GAME_AUTHORITY=your-backend-or-unity-authority-wallet-address
-```
-
-`VITE_SOLANA_RPC_URL` verilmezse uygulama `VITE_SOLANA_CLUSTER` degerine gore RPC endpoint secmeye calisir. O da verilmezse varsayilan `devnet` olur.
-
-Not:
-
-- `VITE_SUPABASE_URL` bu kod tabaninda aktif olarak kullanilmiyor; `VITE_SUPABASE_PROJECT_ID` yeterlidir.
-- `VITE_SOLANA_TOKEN_MINT` opsiyoneldir. Bos birakilirsa token bakiyesi zincirden okunmaz.
-
-Supabase Edge Function tarafinda da su degiskenler tanimli olmalidir:
-
-```bash
-SUPABASE_URL=https://your-project-id.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-```
-
-SQL migration adimlari icin [SUPABASE_SETUP.md](./docs/setup/SUPABASE_SETUP.md) dosyasini kullanin.
-Solana/RPC ve wallet akislari icin [SOLANA_SETUP.md](./docs/setup/SOLANA_SETUP.md) dosyasini kullanin.
-Demo veya deploy oncesi temel kontrol icin [SMOKE_TEST_TR.md](./docs/SMOKE_TEST_TR.md) dosyasini kullanin.
-
-### Komutlar
+### Lokal Gelistirme
 
 ```bash
 npm install
 npm run dev
 ```
 
-Diger komutlar:
+### Temel Komutlar
 
 ```bash
-npm run clean
 npm run build
-npm run preview
 npm run lint
-npm run format
 npm run validate
+npm run test:smoke
+```
+
+### Solana Komutlari
+
+```bash
 npm run solana:build
 npm run solana:sync-idl
+npm run solana:sync-market-idl
 npm run solana:sync-shop
 npm run solana:set-game-authority
 npm run solana:bootstrap
 ```
 
-## Backend API Ozet
+Not:
 
-Edge function base path:
+- program kodu degisti ama zincire alinmadiysa ek olarak `anchor deploy` gerekir
+- proje devnet-first calisir
 
-```text
-https://<SUPABASE_PROJECT_ID>.supabase.co/functions/v1/make-server-5d6242bb
+## Environment
+
+Ornekler icin [`.env.example`](./.env.example) dosyasina bak.
+
+Frontend tarafinda tipik olarak gerekenler:
+
+```bash
+VITE_SUPABASE_PROJECT_ID=your-project-id
+VITE_SUPABASE_ANON_KEY=your-anon-key
+VITE_SOLANA_CLUSTER=devnet
+VITE_SOLANA_RPC_URL=https://api.devnet.solana.com
+VITE_SOLANA_TOKEN_MINT=your-devnet-token-mint-address
+VITE_ADMIN_WALLETS=your-admin-wallet-address
+VITE_WALLET_BRIDGE_ALLOWED_CALLBACK_PREFIXES=yourapp://wallet-bridge
 ```
 
-Mevcut route gruplari:
+Backend tarafinda tipik olarak gerekenler:
 
-- `GET /health`
-- `GET /stats/platform`
-- `GET /token/info`
-- `GET/PUT /profile/:walletAddress`
-- `POST /profile/:walletAddress/cosmetics/unlock`
-- `GET /profile/:walletAddress/stats`
-- `GET/POST /inventory/:walletAddress`
-- `GET/POST /forum/posts`
-- `DELETE /forum/posts/:postId`
-- `GET/POST /forum/posts/:postId/comments`
-- `POST /forum/posts/:postId/like`
-- `GET /forum/posts/user/:walletAddress`
-- `GET /shop/items`
-- `POST /shop/purchase`
-- `GET/POST /market/listings`
-- `DELETE /market/listings/:listingId`
-- `POST /market/listings/:listingId/trade`
-- `GET /market/listings/user/:walletAddress`
-- `GET /bootstrap/config`
-- `POST /game/sync`
-- `POST /game/event`
-
-## Wallet Auth
-
-Bazi yazma islemleri ek olarak Solana mesaj imzasi ister. Frontend su header'lari yollar:
-
-```text
-Authorization: Bearer <SUPABASE_ANON_KEY>
-x-wallet-address: <walletAddress>
-x-wallet-message: <json-string-message>
-x-wallet-signature: <base64-signature>
-Content-Type: application/json
+```bash
+SUPABASE_URL=https://your-project-id.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+DUAN_SHOP_GAME_AUTHORITY_SECRET_KEY=your-secret-key
 ```
 
-Imzalanan mesaj semasi:
+Guvenlik notu:
 
-```json
-{
-  "domain": "DUAN",
-  "action": "profile:update",
-  "walletAddress": "wallet_public_key",
-  "timestamp": 1710000000000
-}
-```
+- gercek secret, private key veya service role key repoya yazilmaz
+- GitHub Actions `Secrets` ve `Variables` kullanilir
 
-Sunucu mesajin:
+## GitHub Pages
 
-- `domain` degerini
-- `action` alanini
-- wallet adresini
-- zaman damgasini
-- detached signature gecerligini
+Pages workflow hazirdir. Kurulum notlari:
 
-dogrular.
+- [GITHUB_PAGES_SETUP.md](./docs/setup/GITHUB_PAGES_SETUP.md)
 
-## Bilinen Durumlar
+Temel mantik:
 
-- Forum gorsel yukleme UI'da var ancak upload/backing storage entegrasyonu yok.
-- `VITE_SOLANA_TOKEN_MINT` tanimlanmadan DUAN token bakiyesi zincirden okunamaz.
-- Unity ve web istemcileri icin ortak veri kontratlari halen gelistirilmektedir.
+- router `hash` modunda calisir
+- deploy GitHub Actions uzerinden yapilir
+- `main` branch push ile Pages guncellenir
 
 ## Diger Dokumanlar
 
-- [Oyun entegrasyonu](./docs/GAME_INTEGRATION.md)
-- [Proje gelistirme rehberi](./docs/Guidelines.md)
-- [Atiflar](./docs/ATTRIBUTIONS.md)
+- [NIHAI_VERSIYON.md](./docs/NIHAI_VERSIYON.md)
+- [GENEL_DURUM_RAPORU.md](./docs/GENEL_DURUM_RAPORU.md)
+- [SOLANA_SETUP.md](./docs/setup/SOLANA_SETUP.md)
+- [SUPABASE_SETUP.md](./docs/setup/SUPABASE_SETUP.md)
+- [GAME_INTEGRATION.md](./docs/GAME_INTEGRATION.md)
+- [SHARED_METADATA_STRATEGY.md](./docs/SHARED_METADATA_STRATEGY.md)
+- [DEVNET_REALTIME_STRATEGY.md](./docs/DEVNET_REALTIME_STRATEGY.md)
 
-## GitHub Pages Deploy
+## Mevcut Sinirlar
 
-Bu repo GitHub Pages icin hash router ile deploy edilecek sekilde hazirlandi. `main` veya `master` branch'ine push edildiginde [`.github/workflows/deploy-pages.yml`](./.github/workflows/deploy-pages.yml) workflow'u `dist/` artefact'ini Pages'e yukler.
+- proje devnet odaklidir
+- canli oracle mantigi DUAN icin dogrudan market fiyatı degil, SOL/USD referansindan turetilmis tahmini degerdir
+- market settlement tam olarak production-grade on-chain hale gelmis degildir
+- Unity entegrasyonu ileridir ama tum runtime senaryolari bitmis sayilmaz
 
-Beklenen yayin adresi:
+## Onerilen Sonraki Adimlar
 
-```text
-https://sopwit.github.io/SOL-101-Web/
-```
-
-Unity `DuanApiConfig` icin bridge adresi:
-
-```text
-https://sopwit.github.io/SOL-101-Web/#/wallet-bridge
-```
-
-Unity callback adresi:
-
-```text
-sol101unity://wallet-bridge
-```
+- GitHub Pages variable/secret ayarlarini tamamlamak
+- devnet deploy ve IDL sync adimlarini son haliyle dogrulamak
+- Unity runtime dogrulamalarini Editor ve WebGL tarafinda tamamlamak
+- README ve dokumanlar ile kodun birlikte guncel kalmasini surdurmek

@@ -23,6 +23,7 @@ import { reportError } from '../lib/telemetry';
 
 interface PlatformStats {
   activeUsers: number;
+  onlineUsers: number;
   totalItems: number;
   completedTrades: number;
   lastUpdated?: string;
@@ -280,6 +281,7 @@ export function OpsPage() {
 
   const metrics = [
     { label: 'Users', value: `${overview?.summary.users ?? stats?.activeUsers ?? 0}` },
+    { label: 'Online', value: `${overview?.summary.onlineUsers ?? stats?.onlineUsers ?? 0}` },
     { label: 'Posts', value: `${overview?.summary.posts ?? forumPosts.length}` },
     { label: 'Listings', value: `${overview?.summary.activeListings ?? marketListings.filter((entry) => entry.status === 'active').length}` },
   ];
@@ -554,14 +556,14 @@ export function OpsPage() {
                 <p className="mt-2 text-sm text-muted-foreground">Kayitli profil sayisi</p>
               </GlassCard>
               <GlassCard className="p-6">
+                <div className="mb-3 text-sm font-semibold uppercase tracking-[0.18em] text-muted-foreground">Online</div>
+                <div className="text-3xl font-black">{overview?.summary.onlineUsers ?? stats?.onlineUsers ?? 0}</div>
+                <p className="mt-2 text-sm text-muted-foreground">Son 2 dakikada heartbeat gonderen oyuncular</p>
+              </GlassCard>
+              <GlassCard className="p-6">
                 <div className="mb-3 text-sm font-semibold uppercase tracking-[0.18em] text-muted-foreground">Posts</div>
                 <div className="text-3xl font-black">{overview?.summary.posts ?? forumPosts.length}</div>
                 <p className="mt-2 text-sm text-muted-foreground">Forum icerik hacmi</p>
-              </GlassCard>
-              <GlassCard className="p-6">
-                <div className="mb-3 text-sm font-semibold uppercase tracking-[0.18em] text-muted-foreground">Listings</div>
-                <div className="text-3xl font-black">{overview?.summary.activeListings ?? 0}</div>
-                <p className="mt-2 text-sm text-muted-foreground">Aktif market listing sayisi</p>
               </GlassCard>
               <GlassCard className="p-6">
                 <div className="mb-3 text-sm font-semibold uppercase tracking-[0.18em] text-muted-foreground">Pending Trades</div>
@@ -646,6 +648,13 @@ export function OpsPage() {
                 <p className="mt-2 text-sm text-muted-foreground">DUAN / SOL oranı</p>
               </GlassCard>
               <GlassCard className="p-6">
+                <div className="mb-3 text-sm font-semibold uppercase tracking-[0.18em] text-muted-foreground">USD Reference</div>
+                <div className="text-3xl font-black">{overview?.tokenInfo?.priceUsd ?? 0}</div>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {overview?.tokenInfo?.livePricing ? 'Canli SOL piyasa referansi aktif' : 'Fallback ekonomi kaynagi kullaniliyor'}
+                </p>
+              </GlassCard>
+              <GlassCard className="p-6">
                 <div className="mb-3 text-sm font-semibold uppercase tracking-[0.18em] text-muted-foreground">Supply</div>
                 <div className="text-3xl font-black">{overview?.tokenInfo?.circulatingSupply ?? 0}</div>
                 <p className="mt-2 text-sm text-muted-foreground">Dolasimdaki arz</p>
@@ -661,6 +670,19 @@ export function OpsPage() {
                 <p className="mt-2 text-sm text-muted-foreground">Admin gorunen trade kaydi</p>
               </GlassCard>
             </div>
+
+            <GlassCard className="p-6">
+              <div className="mb-4 flex items-center gap-3">
+                <Wallet className="h-5 w-5 text-primary" />
+                <h3 className="text-xl font-black">Token Price Source</h3>
+              </div>
+              <div className="grid gap-3 text-sm text-muted-foreground md:grid-cols-2">
+                <div>Source: {overview?.tokenInfo?.priceSource ?? 'unknown'}</div>
+                <div>SOL/USD: {overview?.tokenInfo?.solUsdPrice ?? 0}</div>
+                <div>Live pricing: {overview?.tokenInfo?.livePricing ? 'enabled' : 'fallback'}</div>
+                <div>Updated: {formatDateTime(overview?.tokenInfo?.lastUpdated)}</div>
+              </div>
+            </GlassCard>
 
             {filteredTrades.length ? (
               <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">

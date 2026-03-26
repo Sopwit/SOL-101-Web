@@ -81,6 +81,48 @@ async function getOnlinePresenceCount() {
   }).length;
 }
 
+async function getResolvedTokenInfo() {
+  const marketReference = await fetchLiveSolUsdPrice();
+  let tokenInfo = await kv.get("token:info");
+
+  if (!tokenInfo) {
+    tokenInfo = {
+      symbol: "DUAN",
+      name: "DUAN Token",
+      price: DUAN_TO_SOL_RATE,
+      totalSupply: 1000000,
+      circulatingSupply: 500000,
+      solUsdPrice: marketReference.solUsdPrice,
+      priceUsd: Number((DUAN_TO_SOL_RATE * marketReference.solUsdPrice).toFixed(6)),
+      priceSource: marketReference.source,
+      livePricing: marketReference.live,
+      lastUpdated: new Date().toISOString(),
+    };
+    await kv.set("token:info", tokenInfo);
+    return tokenInfo;
+  }
+
+  if (
+    tokenInfo.price !== DUAN_TO_SOL_RATE ||
+    tokenInfo.solUsdPrice !== marketReference.solUsdPrice ||
+    tokenInfo.priceSource !== marketReference.source ||
+    tokenInfo.livePricing !== marketReference.live
+  ) {
+    tokenInfo = {
+      ...tokenInfo,
+      price: DUAN_TO_SOL_RATE,
+      solUsdPrice: marketReference.solUsdPrice,
+      priceUsd: Number((DUAN_TO_SOL_RATE * marketReference.solUsdPrice).toFixed(6)),
+      priceSource: marketReference.source,
+      livePricing: marketReference.live,
+      lastUpdated: new Date().toISOString(),
+    };
+    await kv.set("token:info", tokenInfo);
+  }
+
+  return tokenInfo;
+}
+
 // Web tarafinda tetiklenen davranislari anlamli odullere baglayan basit
 // achievement matrisi. Profil/stats tarafi bu liste uzerinden normalize edilir.
 const WEB_ACHIEVEMENTS = [
@@ -995,6 +1037,7 @@ app.get("/make-server-5d6242bb/stats/platform", async (c) => {
     // Toplam profil sayisi; gercek "online user" metriği degil.
     const profiles = await kv.getByPrefix("profile:");
     const totalProfiles = profiles.length;
+    const onlineUsers = await getOnlinePresenceCount();
 
     // Get total items in all inventories
     const inventoryItems = await kv.getByPrefix("inventory:");
@@ -1007,6 +1050,7 @@ app.get("/make-server-5d6242bb/stats/platform", async (c) => {
     return c.json({
       totalProfiles,
       activeUsers: totalProfiles,
+      onlineUsers,
       totalItems,
       completedTrades,
       lastUpdated: new Date().toISOString(),
@@ -1020,48 +1064,33 @@ app.get("/make-server-5d6242bb/stats/platform", async (c) => {
 // Get token price and supply info
 app.get("/make-server-5d6242bb/token/info", async (c) => {
   try {
-    const marketReference = await fetchLiveSolUsdPrice();
-
-    // Get or initialize token info
-    let tokenInfo = await kv.get("token:info");
-
-    if (!tokenInfo) {
-      // Initialize with default values
-      tokenInfo = {
-        symbol: "DUAN",
-        name: "DUAN Token",
-        price: DUAN_TO_SOL_RATE,
-        totalSupply: 1000000,
-        circulatingSupply: 500000,
-        solUsdPrice: marketReference.solUsdPrice,
-        priceUsd: Number((DUAN_TO_SOL_RATE * marketReference.solUsdPrice).toFixed(6)),
-        priceSource: marketReference.source,
-        livePricing: marketReference.live,
-        lastUpdated: new Date().toISOString(),
-      };
-      await kv.set("token:info", tokenInfo);
-    } else if (
-      tokenInfo.price !== DUAN_TO_SOL_RATE ||
-      tokenInfo.solUsdPrice !== marketReference.solUsdPrice ||
-      tokenInfo.priceSource !== marketReference.source ||
-      tokenInfo.livePricing !== marketReference.live
-    ) {
-      tokenInfo = {
-        ...tokenInfo,
-        price: DUAN_TO_SOL_RATE,
-        solUsdPrice: marketReference.solUsdPrice,
-        priceUsd: Number((DUAN_TO_SOL_RATE * marketReference.solUsdPrice).toFixed(6)),
-        priceSource: marketReference.source,
-        livePricing: marketReference.live,
-        lastUpdated: new Date().toISOString(),
-      };
-      await kv.set("token:info", tokenInfo);
-    }
-
+    const tokenInfo = await getResolvedTokenInfo();
     return c.json(tokenInfo);
   } catch (error) {
     console.error("Error fetching token info:", error);
     return c.json({ error: "Failed to fetch token info" }, 500);
+  }
+});
+
+app.post("/make-server-5d6242bb/presence/heartbeat", async (c) => {
+  try {
+    const payload = await c.req.json();
+    const walletAddress = String(payload?.walletAddress ?? "").trim();
+
+    if (!walletAddress) {
+      return c.json({ error: "walletAddress is required" }, 400);
+    }
+
+    await kv.set(`presence:${walletAddress}`, {
+      walletAddress,
+      lastSeenAt: new Date().toISOString(),
+      source: "web",
+    });
+
+    return c.json({ ok: true, walletAddress, lastSeenAt: new Date().toISOString() });
+  } catch (error) {
+    console.error("Error updating presence heartbeat:", error);
+    return c.json({ error: "Failed to update presence heartbeat" }, 500);
   }
 });
 
@@ -1740,12 +1769,13 @@ app.get("/make-server-5d6242bb/admin/overview", async (c) => {
   }
 
   try {
-    const [profiles, posts, listings, trades, tokenInfo] = await Promise.all([
+    const [profiles, posts, listings, trades, tokenInfo, onlineUsers] = await Promise.all([
       kv.getByPrefix("profile:"),
       kv.getByPrefix("post:"),
       kv.getByPrefix("listing:"),
       kv.getByPrefix("trade:"),
-      kv.get("token:info"),
+      getResolvedTokenInfo(),
+      getOnlinePresenceCount(),
     ]);
 
     const recentPosts = [...posts]
@@ -1761,6 +1791,7 @@ app.get("/make-server-5d6242bb/admin/overview", async (c) => {
     return c.json({
       summary: {
         users: profiles.length,
+        onlineUsers,
         posts: posts.length,
         activeListings: listings.filter((entry: any) => entry.status === "active").length,
         pendingTrades: trades.filter((entry: any) => entry.status === "pending").length,

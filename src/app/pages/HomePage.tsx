@@ -14,6 +14,7 @@ import { fetchOnchainShopSnapshot } from '../lib/onchain/duanShopClient';
 
 interface PlatformStats {
   totalProfiles: number;
+  onlineUsers: number;
   totalItems: number;
   completedTrades: number;
 }
@@ -48,7 +49,7 @@ interface HomeCatalogState {
 export function HomePage() {
   const { connection } = useConnection();
   const { t, language } = useLanguage();
-  const [stats, setStats] = useState<PlatformStats>(() => pageDataCache.home.stats ?? { totalProfiles: 0, totalItems: 0, completedTrades: 0 });
+  const [stats, setStats] = useState<PlatformStats>(() => pageDataCache.home.stats ?? { totalProfiles: 0, onlineUsers: 0, totalItems: 0, completedTrades: 0 });
   const [tokenInfo, setTokenInfo] = useState<HomeTokenInfo | null>(() => pageDataCache.home.tokenInfo);
   const [runtimeState, setRuntimeState] = useState<HomeRuntimeState | null>(() => pageDataCache.home.runtime);
   const [catalogState, setCatalogState] = useState<HomeCatalogState | null>(() => pageDataCache.home.onchainCatalog);
@@ -72,6 +73,7 @@ export function HomePage() {
         if (statsResponse.success && statsResponse.data) {
           const nextStats = {
             totalProfiles: statsResponse.data.totalProfiles ?? statsResponse.data.activeUsers,
+            onlineUsers: statsResponse.data.onlineUsers ?? 0,
             totalItems: statsResponse.data.totalItems,
             completedTrades: statsResponse.data.completedTrades,
           };
@@ -180,9 +182,9 @@ export function HomePage() {
 
   const statCards = [
     { label: t('home.totalProfiles'), value: stats.totalProfiles, icon: User },
+    { label: t('home.onlineUsers'), value: stats.onlineUsers, icon: Sparkles },
     { label: t('home.totalItems'), value: stats.totalItems, icon: ShoppingBag },
     { label: t('home.completedTrades'), value: stats.completedTrades, icon: TrendingUp },
-    { label: t('home.catalogItems'), value: catalogState?.itemCount ?? 0, icon: Store },
   ];
 
   const runtimeCards = [
@@ -368,6 +370,11 @@ export function HomePage() {
               </p>
               <h2 className="mb-4 text-3xl font-bold">{t('home.liveLayer')}</h2>
               <p className="max-w-2xl text-muted-foreground">{t('home.updatedSummary')}</p>
+              <p className="mt-4 text-sm text-muted-foreground">
+                {t('home.lastUpdated')}: {pageDataCache.home.lastUpdatedAt
+                  ? new Date(pageDataCache.home.lastUpdatedAt).toLocaleString(language === 'tr' ? 'tr-TR' : 'en-US')
+                  : '--'}
+              </p>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row lg:flex-col">
               <Link to="/profile">

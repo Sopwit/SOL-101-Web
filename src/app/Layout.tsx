@@ -2,9 +2,11 @@ import { Outlet } from 'react-router';
 import { Navbar } from './components/Navbar';
 import { Footer } from './components/Footer';
 import { useBalance } from './hooks/useBalance';
+import { usePresenceHeartbeat } from './hooks/usePresenceHeartbeat';
 
 export function Layout() {
   useBalance();
+  usePresenceHeartbeat();
 
   return (
     <div className="min-h-screen flex flex-col bg-[radial-gradient(circle_at_top_left,rgba(34,197,94,0.1),transparent_26%),radial-gradient(circle_at_top_right,rgba(251,191,36,0.08),transparent_20%),radial-gradient(circle_at_bottom_right,rgba(244,114,182,0.08),transparent_24%),linear-gradient(180deg,rgba(255,255,255,0.04),transparent)]">

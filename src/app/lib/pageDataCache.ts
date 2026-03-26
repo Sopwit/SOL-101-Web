@@ -17,6 +17,7 @@ export const pageDataCache: {
   home: {
     stats: {
       totalProfiles: number;
+      onlineUsers: number;
       totalItems: number;
       completedTrades: number;
     } | null;

@@ -44,6 +44,7 @@ const translations: Translations = {
   'home.openMarket': { tr: 'Pazari Incele', en: 'Browse Market' },
   'home.features': { tr: 'Platform Modulleri', en: 'Platform Modules' },
   'home.totalProfiles': { tr: 'Toplam Oyuncu Profili', en: 'Total Player Profiles' },
+  'home.onlineUsers': { tr: 'Cevrimici Oyuncular', en: 'Online Players' },
   'home.totalItems': { tr: 'Toplam Item', en: 'Total Items' },
   'home.completedTrades': { tr: 'Tamamlanan Takas', en: 'Completed Trades' },
   'home.liveLayer': { tr: 'Canli operasyon katmani', en: 'Live operations layer' },
@@ -69,6 +70,7 @@ const translations: Translations = {
   'home.catalogStatus': { tr: 'Katalog Durumu', en: 'Catalog Status' },
   'home.catalogItems': { tr: 'Katalog Itemleri', en: 'Catalog Items' },
   'home.updatedSummary': { tr: 'Ana ekran artik platform istatistikleri, token verisi, devnet runtime ve on-chain katalog durumu ile guncel sistem fotografini verir.', en: 'The homepage now presents an up-to-date system snapshot with platform stats, token data, devnet runtime, and on-chain catalog state.' },
+  'home.lastUpdated': { tr: 'Son guncelleme', en: 'Last updated' },
   
   // Features
   'feature.forum.title': { tr: 'Forum', en: 'Forum' },

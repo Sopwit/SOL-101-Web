@@ -90,6 +90,7 @@ export interface AdminSession {
 export interface AdminOverviewResponse {
   summary: {
     users: number;
+    onlineUsers: number;
     posts: number;
     activeListings: number;
     pendingTrades: number;
@@ -109,6 +110,10 @@ export interface AdminOverviewResponse {
     symbol: string;
     name: string;
     price: number;
+    priceUsd?: number;
+    solUsdPrice?: number;
+    priceSource?: string;
+    livePricing?: boolean;
     totalSupply: number;
     circulatingSupply: number;
     lastUpdated: string;
@@ -465,6 +470,7 @@ class ApiService {
   async getPlatformStats(): Promise<ApiResponse<{
     totalProfiles: number;
     activeUsers: number;
+    onlineUsers: number;
     totalItems: number;
     completedTrades: number;
     lastUpdated: string;
@@ -486,6 +492,13 @@ class ApiService {
     lastUpdated: string;
   }>> {
     return this.request(`/token/info`, { method: 'GET' });
+  }
+
+  async sendPresenceHeartbeat(walletAddress: string): Promise<ApiResponse<{ ok: boolean; walletAddress: string; lastSeenAt: string }>> {
+    return this.request(`/presence/heartbeat`, {
+      method: 'POST',
+      body: JSON.stringify({ walletAddress }),
+    });
   }
 
   async getAdminOverview(adminToken: string): Promise<ApiResponse<AdminOverviewResponse>> {
