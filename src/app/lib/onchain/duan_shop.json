@@ -1,0 +1,928 @@
+{
+  "address": "3bssRuvTNFzsGbawzSWtFgycQBXvL1vWXnq44XUSu5y3",
+  "metadata": {
+    "name": "duan_shop",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "On-chain shop state and pricing logic for DUAN"
+  },
+  "instructions": [
+    {
+      "name": "initialize_shop",
+      "discriminator": [
+        76,
+        158,
+        246,
+        22,
+        47,
+        236,
+        107,
+        186
+      ],
+      "accounts": [
+        {
+          "name": "shop_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  104,
+                  111,
+                  112,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "treasury",
+          "writable": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "purchase_item",
+      "discriminator": [
+        38,
+        91,
+        106,
+        119,
+        28,
+        153,
+        35,
+        183
+      ],
+      "accounts": [
+        {
+          "name": "shop_config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  104,
+                  111,
+                  112,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "shop_item",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  105,
+                  116,
+                  101,
+                  109
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "shop_config"
+              },
+              {
+                "kind": "account",
+                "path": "shop_item.item_id",
+                "account": "ShopItem"
+              }
+            ]
+          }
+        },
+        {
+          "name": "buyer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "owned_item",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  119,
+                  110,
+                  101,
+                  100,
+                  45,
+                  105,
+                  116,
+                  101,
+                  109
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "buyer"
+              },
+              {
+                "kind": "account",
+                "path": "shop_config"
+              },
+              {
+                "kind": "account",
+                "path": "shop_item.item_id",
+                "account": "ShopItem"
+              }
+            ]
+          }
+        },
+        {
+          "name": "player_profile",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  108,
+                  97,
+                  121,
+                  101,
+                  114,
+                  45,
+                  112,
+                  114,
+                  111,
+                  102,
+                  105,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "shop_config"
+              },
+              {
+                "kind": "account",
+                "path": "buyer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "treasury",
+          "writable": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "refresh_item",
+      "discriminator": [
+        76,
+        198,
+        144,
+        146,
+        196,
+        223,
+        72,
+        172
+      ],
+      "accounts": [
+        {
+          "name": "shop_config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  104,
+                  111,
+                  112,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "shop_item",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  105,
+                  116,
+                  101,
+                  109
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "shop_config"
+              },
+              {
+                "kind": "account",
+                "path": "shop_item.item_id",
+                "account": "ShopItem"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "set_game_authority",
+      "discriminator": [
+        230,
+        153,
+        74,
+        233,
+        99,
+        8,
+        145,
+        245
+      ],
+      "accounts": [
+        {
+          "name": "shop_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  104,
+                  111,
+                  112,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "shop_config"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "new_game_authority",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "upsert_item",
+      "discriminator": [
+        162,
+        170,
+        209,
+        51,
+        242,
+        20,
+        147,
+        84
+      ],
+      "accounts": [
+        {
+          "name": "shop_config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  104,
+                  111,
+                  112,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "shop_config"
+          ]
+        },
+        {
+          "name": "shop_item",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  105,
+                  116,
+                  101,
+                  109
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "shop_config"
+              },
+              {
+                "kind": "arg",
+                "path": "args.item_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "UpsertItemArgs"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "upsert_player_profile",
+      "discriminator": [
+        178,
+        149,
+        95,
+        125,
+        48,
+        251,
+        58,
+        41
+      ],
+      "accounts": [
+        {
+          "name": "shop_config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  104,
+                  111,
+                  112,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "game_authority",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "shop_config"
+          ]
+        },
+        {
+          "name": "owner"
+        },
+        {
+          "name": "player_profile",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  108,
+                  97,
+                  121,
+                  101,
+                  114,
+                  45,
+                  112,
+                  114,
+                  111,
+                  102,
+                  105,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "shop_config"
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "UpsertPlayerProfileArgs"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "OwnedItem",
+      "discriminator": [
+        29,
+        195,
+        60,
+        123,
+        148,
+        54,
+        54,
+        193
+      ]
+    },
+    {
+      "name": "PlayerProfile",
+      "discriminator": [
+        82,
+        226,
+        99,
+        87,
+        164,
+        130,
+        181,
+        80
+      ]
+    },
+    {
+      "name": "ShopConfig",
+      "discriminator": [
+        172,
+        16,
+        104,
+        212,
+        87,
+        129,
+        125,
+        155
+      ]
+    },
+    {
+      "name": "ShopItem",
+      "discriminator": [
+        252,
+        183,
+        166,
+        160,
+        217,
+        170,
+        182,
+        16
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "ItemPurchasedEvent",
+      "discriminator": [
+        161,
+        68,
+        223,
+        210,
+        139,
+        156,
+        81,
+        84
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "Unauthorized",
+      "msg": "Only the configured authority can perform this action."
+    },
+    {
+      "code": 6001,
+      "name": "ItemIdTooLong",
+      "msg": "The provided item id is too long."
+    },
+    {
+      "code": 6002,
+      "name": "ItemRestocking",
+      "msg": "This item is currently restocking."
+    },
+    {
+      "code": 6003,
+      "name": "TreasuryMismatch",
+      "msg": "The provided treasury does not match the shop configuration."
+    },
+    {
+      "code": 6004,
+      "name": "ShopMismatch",
+      "msg": "The provided item does not belong to this shop configuration."
+    },
+    {
+      "code": 6005,
+      "name": "OwnedItemOwnerMismatch",
+      "msg": "The owned item record does not belong to the current owner."
+    },
+    {
+      "code": 6006,
+      "name": "OwnedItemShopMismatch",
+      "msg": "The owned item record does not belong to this shop configuration."
+    },
+    {
+      "code": 6007,
+      "name": "OwnedItemItemMismatch",
+      "msg": "The owned item record does not match the requested item."
+    },
+    {
+      "code": 6008,
+      "name": "PlayerProfileOwnerMismatch",
+      "msg": "The player profile does not belong to the current owner."
+    },
+    {
+      "code": 6009,
+      "name": "PlayerProfileShopMismatch",
+      "msg": "The player profile does not belong to this shop configuration."
+    }
+  ],
+  "types": [
+    {
+      "name": "ItemPurchasedEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "shop",
+            "type": "pubkey"
+          },
+          {
+            "name": "item",
+            "type": "pubkey"
+          },
+          {
+            "name": "item_id",
+            "type": "string"
+          },
+          {
+            "name": "buyer",
+            "type": "pubkey"
+          },
+          {
+            "name": "purchase_price",
+            "type": "u64"
+          },
+          {
+            "name": "stock_after",
+            "type": "u32"
+          },
+          {
+            "name": "sold_count",
+            "type": "u64"
+          },
+          {
+            "name": "restock_at",
+            "type": "i64"
+          },
+          {
+            "name": "owned_quantity",
+            "type": "u32"
+          }
+        ]
+      }
+    },
+    {
+      "name": "OwnedItem",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "shop",
+            "type": "pubkey"
+          },
+          {
+            "name": "item_id",
+            "type": "string"
+          },
+          {
+            "name": "quantity",
+            "type": "u32"
+          },
+          {
+            "name": "total_spent",
+            "type": "u64"
+          },
+          {
+            "name": "last_purchase_at",
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PlayerProfile",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "shop",
+            "type": "pubkey"
+          },
+          {
+            "name": "level",
+            "type": "u32"
+          },
+          {
+            "name": "xp",
+            "type": "u64"
+          },
+          {
+            "name": "xp_to_next_level",
+            "type": "u64"
+          },
+          {
+            "name": "total_items",
+            "type": "u32"
+          },
+          {
+            "name": "total_trades",
+            "type": "u32"
+          },
+          {
+            "name": "achievements",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "last_synced_at",
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ShopConfig",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "game_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "treasury",
+            "type": "pubkey"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ShopItem",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "shop",
+            "type": "pubkey"
+          },
+          {
+            "name": "item_id",
+            "type": "string"
+          },
+          {
+            "name": "price",
+            "type": "u64"
+          },
+          {
+            "name": "base_price",
+            "type": "u64"
+          },
+          {
+            "name": "stock",
+            "type": "u32"
+          },
+          {
+            "name": "base_stock",
+            "type": "u32"
+          },
+          {
+            "name": "sold_count",
+            "type": "u64"
+          },
+          {
+            "name": "restock_at",
+            "type": "i64"
+          },
+          {
+            "name": "restock_duration_seconds",
+            "type": "i64"
+          },
+          {
+            "name": "rarity",
+            "type": "u8"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "UpsertItemArgs",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "item_id",
+            "type": "string"
+          },
+          {
+            "name": "base_price",
+            "type": "u64"
+          },
+          {
+            "name": "base_stock",
+            "type": "u32"
+          },
+          {
+            "name": "stock",
+            "type": {
+              "option": "u32"
+            }
+          },
+          {
+            "name": "sold_count",
+            "type": {
+              "option": "u64"
+            }
+          },
+          {
+            "name": "restock_at",
+            "type": {
+              "option": "i64"
+            }
+          },
+          {
+            "name": "restock_duration_seconds",
+            "type": "i64"
+          },
+          {
+            "name": "rarity",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "UpsertPlayerProfileArgs",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "level",
+            "type": "u32"
+          },
+          {
+            "name": "xp",
+            "type": "u64"
+          },
+          {
+            "name": "xp_to_next_level",
+            "type": "u64"
+          },
+          {
+            "name": "total_items",
+            "type": "u32"
+          },
+          {
+            "name": "total_trades",
+            "type": "u32"
+          },
+          {
+            "name": "achievements",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
