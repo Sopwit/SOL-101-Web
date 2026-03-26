@@ -14,7 +14,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { useLanguage } from '../contexts/LanguageContext';
 import { fetchOnchainShopItems, purchaseOnchainShopItem } from '../lib/onchain/duanShopClient';
 import { pageDataCache } from '../lib/pageDataCache';
-import { createWalletAuth } from '../lib/walletAuth';
 import { localizeShopItem, normalizeShopSearch } from '../lib/shopItemLocalization';
 import { resolveAssetUrl } from '../lib/assetUrls';
 import { useStore } from '../store';
@@ -43,8 +42,8 @@ export function ShopPage() {
   const [tokenInfo, setTokenInfo] = useState<TokenInfo | null>(() => pageDataCache.shop.tokenInfo);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isLoading, setIsLoading] = useState(() => pageDataCache.shop.items.length === 0);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
-  const [usingFallbackCatalog, setUsingFallbackCatalog] = useState(() => pageDataCache.shop.usingFallbackCatalog);
   const loadRequestIdRef = useRef(0);
 
   const loadItems = async (options?: { silent?: boolean }) => {
@@ -55,56 +54,33 @@ export function ShopPage() {
     }
 
     try {
-      const [tokenResponse, fallbackResponse] = await Promise.all([
+      setLoadError(null);
+      const [tokenResponse, onchainItems] = await Promise.all([
         api.getTokenInfo(),
-        api.getShopItems(),
-      ]);
-
-      const fallbackItems = fallbackResponse.success && fallbackResponse.data ? fallbackResponse.data : [];
-      if (requestId !== loadRequestIdRef.current) return;
-
-      setUsingFallbackCatalog(true);
-      setItems(fallbackItems);
-      const nextTokenInfo = tokenResponse.success && tokenResponse.data ? tokenResponse.data : null;
-      setTokenInfo(nextTokenInfo);
-      pageDataCache.shop.items = fallbackItems;
-      pageDataCache.shop.tokenInfo = nextTokenInfo;
-      pageDataCache.shop.usingFallbackCatalog = true;
-
-      try {
-        const onchainItems = await Promise.race([
+        Promise.race([
           fetchOnchainShopItems(connection),
           new Promise<ShopItem[]>((_, reject) => {
             window.setTimeout(() => reject(new Error('On-chain shop request timed out')), 4000);
           }),
-        ]);
+        ]),
+      ]);
 
-        if (requestId !== loadRequestIdRef.current) return;
-        if (onchainItems.length > 0) {
-          setUsingFallbackCatalog(false);
-          setItems(onchainItems);
-          pageDataCache.shop.items = onchainItems;
-          pageDataCache.shop.usingFallbackCatalog = false;
-        }
-      } catch (error) {
-        console.warn('Using fallback shop catalog:', error);
-      }
+      if (requestId !== loadRequestIdRef.current) return;
+
+      setItems(onchainItems);
+      const nextTokenInfo = tokenResponse.success && tokenResponse.data ? tokenResponse.data : null;
+      setTokenInfo(nextTokenInfo);
+      pageDataCache.shop.items = onchainItems;
+      pageDataCache.shop.tokenInfo = nextTokenInfo;
     } catch (error) {
       console.error('Error loading shop items:', error);
-      const fallbackResponse = await api.getShopItems();
       if (requestId !== loadRequestIdRef.current) return;
-      if (fallbackResponse.success && fallbackResponse.data) {
-        setUsingFallbackCatalog(true);
-        setItems(fallbackResponse.data);
-        pageDataCache.shop.items = fallbackResponse.data;
-        pageDataCache.shop.usingFallbackCatalog = true;
-      } else {
-        toast.error(t('common.error'));
-        setUsingFallbackCatalog(false);
-        setItems([]);
-        pageDataCache.shop.items = [];
-        pageDataCache.shop.usingFallbackCatalog = false;
-      }
+      const message = error instanceof Error ? error.message : t('common.error');
+      setLoadError(message);
+      toast.error(message);
+      setItems([]);
+      pageDataCache.shop.items = [];
+      pageDataCache.shop.usingFallbackCatalog = false;
     } finally {
       if (requestId === loadRequestIdRef.current && !silent) {
         setIsLoading(false);
@@ -163,17 +139,8 @@ export function ShopPage() {
       return;
     }
     try {
-      if (usingFallbackCatalog) {
-        const walletAuth = await createWalletAuth(wallet, 'shop:purchase');
-        if (!walletAuth) return;
-        const response = await api.purchaseItem(publicKey.toBase58(), selectedItem.id, walletAuth);
-        if (!response.success) {
-          throw new Error(response.error || t('common.error'));
-        }
-      } else {
-        const signature = await purchaseOnchainShopItem(connection, wallet, selectedItem.id);
-        console.log('On-chain purchase signature:', signature);
-      }
+      const signature = await purchaseOnchainShopItem(connection, wallet, selectedItem.id);
+      console.log('On-chain purchase signature:', signature);
 
       toast.success(t('shop.purchaseSuccess'));
       setPurchaseDialogOpen(false);
@@ -263,6 +230,11 @@ export function ShopPage() {
 
       {isLoading ? (
         <GlassCard className="p-12 text-center">{t('common.loading')}</GlassCard>
+      ) : loadError ? (
+        <GlassCard className="p-12 text-center">
+          <h3 className="text-xl font-bold mb-2">{t('common.error')}</h3>
+          <p className="text-muted-foreground">{loadError}</p>
+        </GlassCard>
       ) : filteredItems.length === 0 ? (
         <GlassCard className="p-12 text-center">
           <ShoppingCart className="w-14 h-14 mx-auto mb-4 text-muted-foreground" />

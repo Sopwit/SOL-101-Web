@@ -77,19 +77,15 @@ export function ProfilePage() {
   const [unlockingId, setUnlockingId] = useState<string | null>(null);
   const loadRequestIdRef = useRef(0);
 
-  const normalizeInventory = (items: InventoryItem[] | undefined): InventoryItem[] =>
-    (items || []).filter((item): item is InventoryItem => Boolean(item?.item?.id && item?.item?.name));
-
   const loadProfileData = async () => {
     if (!publicKey) return;
     const requestId = ++loadRequestIdRef.current;
 
     setLoading(true);
     try {
-      const [statsResponse, profileResponse, inventoryResponse, onchainInventory, onchainProfile] = await Promise.all([
+      const [statsResponse, profileResponse, onchainInventory, onchainProfile] = await Promise.all([
         api.getProfileStats(walletAddress),
         api.getProfile(walletAddress),
-        api.getInventory(walletAddress),
         fetchOnchainOwnedItems(connection, publicKey),
         fetchOnchainPlayerProfile(connection, publicKey),
       ]);
@@ -107,8 +103,8 @@ export function ProfilePage() {
       if (statsResponse.success && statsResponse.data) {
         const nextStats = {
           ...statsResponse.data,
-          totalItems: Math.max(statsResponse.data.totalItems, onchainProfile?.totalItems ?? 0),
-          totalTrades: Math.max(statsResponse.data.totalTrades, onchainProfile?.totalTrades ?? 0),
+          totalItems: onchainProfile?.totalItems ?? statsResponse.data.totalItems,
+          totalTrades: onchainProfile?.totalTrades ?? statsResponse.data.totalTrades,
         };
         setStats(nextStats);
         pageDataCache.profile.walletAddress = walletAddress;
@@ -132,11 +128,7 @@ export function ProfilePage() {
         pageDataCache.profile.stats = nextStats;
       }
 
-      const backendInventory = inventoryResponse.success && inventoryResponse.data
-        ? normalizeInventory(inventoryResponse.data)
-        : [];
-
-      const nextInventory = [...onchainInventory, ...backendInventory];
+      const nextInventory = onchainInventory;
       setInventory(nextInventory);
       pageDataCache.profile.walletAddress = walletAddress;
       pageDataCache.profile.inventory = nextInventory;

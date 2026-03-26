@@ -3,12 +3,14 @@ import { motion } from 'motion/react';
 import { ArrowRight, Clock, Plus, Sparkles, Trash2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { tr as trLocale, enUS } from 'date-fns/locale';
+import { useConnection } from '@solana/wallet-adapter-react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { toast } from 'sonner';
 import { useLanguage } from '../contexts/LanguageContext';
 import { createWalletAuth } from '../lib/walletAuth';
 import { resolveAssetUrl } from '../lib/assetUrls';
 import { pageDataCache } from '../lib/pageDataCache';
+import { fetchOnchainOwnedItems } from '../lib/onchain/duanShopClient';
 import { localizeShopItem } from '../lib/shopItemLocalization';
 import { GlassCard } from '../components/GlassCard';
 import { RarityBadge } from '../components/RarityBadge';
@@ -23,6 +25,7 @@ import type { InventoryItem, MarketListing } from '../types';
 import { formatDuanWithSol } from '../../../shared/duanEconomy';
 
 export function MarketPage() {
+  const { connection } = useConnection();
   const { connected, publicKey, signMessage } = useWallet();
   const { t, language } = useLanguage();
   const [listings, setListings] = useState<MarketListing[]>(() => pageDataCache.market.listings);
@@ -80,15 +83,15 @@ export function MarketPage() {
 
       setInventoryLoading(true);
       try {
-        const response = await api.getInventory(publicKey.toBase58());
-        setInventoryItems(response.success && response.data ? response.data : []);
+        const nextInventory = await fetchOnchainOwnedItems(connection, publicKey);
+        setInventoryItems(nextInventory);
       } finally {
         setInventoryLoading(false);
       }
     };
 
     void loadInventory();
-  }, [connected, publicKey]);
+  }, [connected, publicKey, connection]);
 
   useEffect(() => {
     if (!selectedListing) {
@@ -247,7 +250,7 @@ export function MarketPage() {
                   </SelectTrigger>
                   <SelectContent>
                     {localizedInventoryItems.map((inventoryItem) => (
-                      <SelectItem key={inventoryItem.id} value={inventoryItem.id}>
+                      <SelectItem key={inventoryItem.id} value={inventoryItem.item.id}>
                         {inventoryItem.item.name}
                       </SelectItem>
                     ))}
