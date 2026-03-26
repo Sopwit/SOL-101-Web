@@ -1,5 +1,8 @@
 name: Frontend CI
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 on:
   push:
     branches: [ main, master, feature/** ]
@@ -12,12 +15,12 @@ jobs:
 
     steps:
     # Kaynak kodu al ve lock dosyasi ile deterministik kurulum yap.
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
     
-    - name: Use Node.js 20
-      uses: actions/setup-node@v4
+    - name: Use Node.js 22
+      uses: actions/setup-node@v6
       with:
-        node-version: 20.x
+        node-version: 22.x
         cache: 'npm'
         cache-dependency-path: package-lock.json
 

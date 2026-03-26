@@ -9,6 +9,7 @@ import { Textarea } from '../components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Progress } from '../components/ui/progress';
 import { createWalletAuth } from '../lib/walletAuth';
+import { resolveAssetUrl } from '../lib/assetUrls';
 import { useStore } from '../store';
 import { fetchOnchainOwnedItems, fetchOnchainPlayerProfile } from '../lib/onchain/duanShopClient';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
@@ -469,7 +470,7 @@ export function ProfilePage() {
                 >
                   <GlassCard hover className="overflow-hidden group">
                     <div className="aspect-square overflow-hidden relative">
-                      <img src={inv.item.imageUrl} alt={inv.item.name} className="w-full h-full object-cover transition-transform group-hover:scale-110" />
+                      <img src={resolveAssetUrl(inv.item.imageUrl)} alt={inv.item.name} className="w-full h-full object-cover transition-transform group-hover:scale-110" />
                     </div>
                     <div className="p-4">
                       <div className="flex items-center justify-between gap-2 mb-2">

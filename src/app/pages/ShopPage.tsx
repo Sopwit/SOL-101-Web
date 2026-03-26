@@ -16,6 +16,7 @@ import { fetchOnchainShopItems, purchaseOnchainShopItem } from '../lib/onchain/d
 import { pageDataCache } from '../lib/pageDataCache';
 import { createWalletAuth } from '../lib/walletAuth';
 import { localizeShopItem, normalizeShopSearch } from '../lib/shopItemLocalization';
+import { resolveAssetUrl } from '../lib/assetUrls';
 import { useStore } from '../store';
 import { api } from '../services/api';
 import type { Rarity, ShopItem } from '../types';
@@ -274,7 +275,7 @@ export function ShopPage() {
             <motion.div key={item.id} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: index * 0.05, duration: 0.3 }}>
               <GlassCard hover className={`overflow-hidden h-full flex flex-col border-2 ${getRarityBorderClass(item.rarity)} cursor-pointer`} onClick={() => handlePurchase(item)}>
                 <div className="aspect-square overflow-hidden relative group">
-                  <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover transition-transform group-hover:scale-110" />
+                  <img src={resolveAssetUrl(item.imageUrl)} alt={item.name} className="w-full h-full object-cover transition-transform group-hover:scale-110" />
                   <div className="absolute top-2 right-2">
                     <RarityBadge rarity={item.rarity} />
                   </div>
@@ -322,7 +323,7 @@ export function ShopPage() {
             <div className="space-y-4">
               <div className="flex justify-center rounded-lg bg-muted/20 p-4">
                 <img
-                  src={localizedSelectedItem.imageUrl}
+                  src={resolveAssetUrl(localizedSelectedItem.imageUrl)}
                   alt={localizedSelectedItem.name}
                   className="h-48 w-auto max-w-full object-contain"
                 />

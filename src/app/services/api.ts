@@ -1,4 +1,5 @@
 import type { User, ForumPost, ForumComment, ShopItem, MarketListing, InventoryItem } from '../types';
+import { resolveAssetUrl } from '../lib/assetUrls';
 
 const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
 const publicAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -17,6 +18,26 @@ export interface WalletAuthHeaders {
   walletAddress: string;
   message: string;
   signature: string;
+}
+
+function normalizeResponseAssets<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map((entry) => normalizeResponseAssets(entry)) as T;
+  }
+
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+
+  const entries = Object.entries(value as Record<string, unknown>).map(([key, entryValue]) => {
+    if ((key === 'imageUrl' || key === 'avatarUrl') && typeof entryValue === 'string') {
+      return [key, resolveAssetUrl(entryValue)];
+    }
+
+    return [key, normalizeResponseAssets(entryValue)];
+  });
+
+  return Object.fromEntries(entries) as T;
 }
 
 class ApiService {
@@ -68,7 +89,7 @@ class ApiService {
         return { success: false, error: errorData.error || 'Bir hata oluştu' };
       }
 
-      const data = await response.json();
+      const data = normalizeResponseAssets(await response.json() as T);
       return { success: true, data };
     } catch (error) {
       console.error(`Network Error [${endpoint}]:`, error);

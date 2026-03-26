@@ -7,6 +7,7 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { toast } from 'sonner';
 import { useLanguage } from '../contexts/LanguageContext';
 import { createWalletAuth } from '../lib/walletAuth';
+import { resolveAssetUrl } from '../lib/assetUrls';
 import { pageDataCache } from '../lib/pageDataCache';
 import { localizeShopItem } from '../lib/shopItemLocalization';
 import { GlassCard } from '../components/GlassCard';
@@ -341,7 +342,7 @@ export function MarketPage() {
                 <div className="flex items-center gap-6">
                   <div className="flex items-center gap-3 flex-1">
                     <div className="w-24 h-24 rounded-lg overflow-hidden flex-shrink-0">
-                      <img src={listing.offeredItem.imageUrl} alt={listing.offeredItem.name} className="w-full h-full object-cover" />
+                      <img src={resolveAssetUrl(listing.offeredItem.imageUrl)} alt={listing.offeredItem.name} className="w-full h-full object-cover" />
                     </div>
                     <div className="flex-1">
                       <p className="text-sm text-muted-foreground mb-1">{t('market.offered')}</p>
@@ -412,7 +413,7 @@ export function MarketPage() {
                 <DialogTitle>{selectedListing.offeredItem.name}</DialogTitle>
                 <DialogDescription>{selectedListing.sellerUsername || selectedListing.sellerWallet}</DialogDescription>
               </DialogHeader>
-              <img src={selectedListing.offeredItem.imageUrl} alt={selectedListing.offeredItem.name} className="w-full aspect-video object-cover rounded-lg" />
+              <img src={resolveAssetUrl(selectedListing.offeredItem.imageUrl)} alt={selectedListing.offeredItem.name} className="w-full aspect-video object-cover rounded-lg" />
               <p className="text-sm text-muted-foreground">{selectedListing.note || t('market.noAdditionalNote')}</p>
               {selectedListing.sellerWallet === walletAddress && (
                 <Button
