@@ -34,6 +34,11 @@ interface TokenInfo {
   symbol: string;
   name: string;
   price: number;
+  priceUsd?: number;
+  solUsdPrice?: number;
+  priceSource?: string;
+  livePricing?: boolean;
+  circulatingSupply?: number;
   lastUpdated: string;
 }
 
@@ -95,8 +100,12 @@ export function ShopPage() {
         severity: 'info',
         title: 'Backend Token Feed',
         detail: language === 'tr'
-          ? 'Token fiyat ve supply bilgisi backend servisinden guncel aliniyor.'
-          : 'Token price and supply are loading correctly from the backend service.',
+          ? response.data.livePricing
+            ? 'Token fiyat ozeti canli SOL piyasa referansi ile guncelleniyor.'
+            : 'Token ozeti backend servisinden geliyor; canli fiyat kaynagi su an kullanilamiyor.'
+          : response.data.livePricing
+            ? 'Token summary is updating with a live SOL market reference.'
+            : 'Token summary is coming from the backend service while the live price source is unavailable.',
       });
       pageDataCache.shop.tokenInfo = response.data;
       return;

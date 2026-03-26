@@ -19,7 +19,7 @@ Sonra su degerleri ekle.
 `VITE_SUPABASE_PROJECT_ID`
 
 ```text
-qswxfzzpignrowepfwmn
+your-supabase-project-id
 ```
 
 `VITE_SOLANA_CLUSTER`
@@ -37,19 +37,19 @@ https://api.devnet.solana.com
 `VITE_SOLANA_TOKEN_MINT`
 
 ```text
-FpoDer4w6cDubBgdd4kqdRqru69iJB3KZLoPAvbhSye
+your-devnet-token-mint-address
 ```
 
 `VITE_ADMIN_WALLETS`
 
 ```text
-CvtkeP6o4z8q9yTFnENeVNaeySFDoM7pAq1Km6GCkU7h
+your-admin-wallet-address,optional-second-admin-wallet
 ```
 
 `VITE_WALLET_BRIDGE_ALLOWED_CALLBACK_PREFIXES`
 
 ```text
-sol101://wallet-bridge,unitydl://wallet-bridge
+yourapp://wallet-bridge,unityapp://wallet-bridge
 ```
 
 `VITE_TELEMETRY_ENDPOINT`
@@ -60,7 +60,13 @@ Bu opsiyonel. Kullanmiyorsan bos birak veya hic ekleme.
 
 `VITE_SUPABASE_ANON_KEY`
 
-Bu degeri repo `.env` dosyasindaki `VITE_SUPABASE_ANON_KEY` ile ayni olacak sekilde secret olarak ekle.
+Bu degeri GitHub `Secrets` icine ekle. Repo icinde, dokumanlarda veya commit gecmisinde acik yazma.
+
+## Guvenlik Notu
+
+- Gercek `project id`, `mint address`, `admin wallet`, callback prefix veya benzeri ortam degerlerini repo icine sabit yazma.
+- Bu degerlerin tamami GitHub `Actions Variables` ve `Actions Secrets` icinde tutulmali.
+- Lokal `.env` dosyalari Git'e eklenmemeli.
 
 ## Pages Ayari
 

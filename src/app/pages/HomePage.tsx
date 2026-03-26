@@ -13,7 +13,7 @@ import { api } from '../services/api';
 import { fetchOnchainShopSnapshot } from '../lib/onchain/duanShopClient';
 
 interface PlatformStats {
-  activeUsers: number;
+  totalProfiles: number;
   totalItems: number;
   completedTrades: number;
 }
@@ -22,6 +22,10 @@ interface HomeTokenInfo {
   symbol: string;
   name: string;
   price: number;
+  priceUsd?: number;
+  solUsdPrice?: number;
+  priceSource?: string;
+  livePricing?: boolean;
   totalSupply: number;
   circulatingSupply: number;
   lastUpdated: string;
@@ -44,7 +48,7 @@ interface HomeCatalogState {
 export function HomePage() {
   const { connection } = useConnection();
   const { t, language } = useLanguage();
-  const [stats, setStats] = useState<PlatformStats>(() => pageDataCache.home.stats ?? { activeUsers: 0, totalItems: 0, completedTrades: 0 });
+  const [stats, setStats] = useState<PlatformStats>(() => pageDataCache.home.stats ?? { totalProfiles: 0, totalItems: 0, completedTrades: 0 });
   const [tokenInfo, setTokenInfo] = useState<HomeTokenInfo | null>(() => pageDataCache.home.tokenInfo);
   const [runtimeState, setRuntimeState] = useState<HomeRuntimeState | null>(() => pageDataCache.home.runtime);
   const [catalogState, setCatalogState] = useState<HomeCatalogState | null>(() => pageDataCache.home.onchainCatalog);
@@ -67,7 +71,7 @@ export function HomePage() {
 
         if (statsResponse.success && statsResponse.data) {
           const nextStats = {
-            activeUsers: statsResponse.data.activeUsers,
+            totalProfiles: statsResponse.data.totalProfiles ?? statsResponse.data.activeUsers,
             totalItems: statsResponse.data.totalItems,
             completedTrades: statsResponse.data.completedTrades,
           };
@@ -162,7 +166,7 @@ export function HomePage() {
       icon: Sparkles,
       title: t('home.economyTitle'),
       description: tokenInfo
-        ? `${t('home.tokenPrice')}: ${tokenInfo.price} SOL • ${t('home.circulatingSupply')}: ${tokenInfo.circulatingSupply.toLocaleString(language === 'tr' ? 'tr-TR' : 'en-US')}`
+        ? `${t('home.tokenPrice')}: ${tokenInfo.price} SOL • ${t('home.tokenPriceUsd')}: ${tokenInfo.priceUsd?.toLocaleString(language === 'tr' ? 'tr-TR' : 'en-US', { maximumFractionDigits: 4 }) ?? '--'} USD`
         : t('home.economyDesc'),
     },
     {
@@ -175,7 +179,7 @@ export function HomePage() {
   ];
 
   const statCards = [
-    { label: t('home.activeUsers'), value: stats.activeUsers, icon: User },
+    { label: t('home.totalProfiles'), value: stats.totalProfiles, icon: User },
     { label: t('home.totalItems'), value: stats.totalItems, icon: ShoppingBag },
     { label: t('home.completedTrades'), value: stats.completedTrades, icon: TrendingUp },
     { label: t('home.catalogItems'), value: catalogState?.itemCount ?? 0, icon: Store },
@@ -191,13 +195,17 @@ export function HomePage() {
     {
       label: t('home.tokenPrice'),
       value: tokenInfo ? `${tokenInfo.price} SOL` : '--',
-      detail: tokenInfo?.name ?? 'DUAN',
+      detail: tokenInfo?.livePricing ? t('home.marketReferenceLive') : t('home.marketReferenceFallback'),
       icon: Coins,
     },
     {
-      label: t('home.circulatingSupply'),
-      value: tokenInfo ? tokenInfo.circulatingSupply.toLocaleString(language === 'tr' ? 'tr-TR' : 'en-US') : '--',
-      detail: t('home.economyDesc'),
+      label: t('home.tokenPriceUsd'),
+      value: tokenInfo?.priceUsd
+        ? `${tokenInfo.priceUsd.toLocaleString(language === 'tr' ? 'tr-TR' : 'en-US', { maximumFractionDigits: 4 })} USD`
+        : '--',
+      detail: tokenInfo?.solUsdPrice
+        ? `${t('home.solReference')}: ${tokenInfo.solUsdPrice.toLocaleString(language === 'tr' ? 'tr-TR' : 'en-US', { maximumFractionDigits: 2 })} USD`
+        : t('home.economyDesc'),
       icon: Wallet,
     },
   ];

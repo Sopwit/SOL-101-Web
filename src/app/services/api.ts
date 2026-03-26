@@ -225,7 +225,16 @@ class ApiService {
   }
 
   async getHealth(): Promise<ApiResponse<ApiHealthResponse>> {
-    return this.request(`/health`, { method: 'GET' });
+    const response = await this.request<ApiHealthResponse>(`/health`, { method: 'GET' });
+
+    if (!response.success) {
+      return response;
+    }
+
+    return {
+      ...response,
+      data: normalizeHealthResponse(response.data),
+    };
   }
 
   async createAdminSession(walletAuth: WalletAuthHeaders): Promise<ApiResponse<AdminSession>> {
@@ -454,6 +463,7 @@ class ApiService {
 
   // Platform Statistics
   async getPlatformStats(): Promise<ApiResponse<{
+    totalProfiles: number;
     activeUsers: number;
     totalItems: number;
     completedTrades: number;
@@ -467,6 +477,10 @@ class ApiService {
     symbol: string;
     name: string;
     price: number;
+    priceUsd?: number;
+    solUsdPrice?: number;
+    priceSource?: string;
+    livePricing?: boolean;
     totalSupply: number;
     circulatingSupply: number;
     lastUpdated: string;

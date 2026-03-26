@@ -4,6 +4,10 @@ type TokenInfoCache = {
   symbol: string;
   name: string;
   price: number;
+  priceUsd?: number;
+  solUsdPrice?: number;
+  priceSource?: string;
+  livePricing?: boolean;
   totalSupply: number;
   circulatingSupply: number;
   lastUpdated: string;
@@ -12,7 +16,7 @@ type TokenInfoCache = {
 export const pageDataCache: {
   home: {
     stats: {
-      activeUsers: number;
+      totalProfiles: number;
       totalItems: number;
       completedTrades: number;
     } | null;

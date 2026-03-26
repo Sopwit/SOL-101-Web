@@ -26,9 +26,60 @@ const AUTH_MAX_AGE_MS = 5 * 60 * 1000;
 const ADMIN_SESSION_TTL_MS = 20 * 60 * 1000;
 const XP_PER_LEVEL = 120;
 const DUAN_SHOP_ACHIEVEMENT_BYTES = 32;
+const DEFAULT_SOL_USD_PRICE = 0;
+const ONLINE_PRESENCE_WINDOW_MS = 2 * 60 * 1000;
 const DUAN_SHOP_PROGRAM_ID = new anchor.web3.PublicKey(
   Deno.env.get("DUAN_SHOP_PROGRAM_ID") ?? duanShopIdl.address,
 );
+
+async function fetchLiveSolUsdPrice() {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+  try {
+    const response = await fetch("https://api.coinbase.com/v2/prices/SOL-USD/spot", {
+      headers: {
+        "accept": "application/json",
+      },
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      throw new Error(`SOL price request failed with ${response.status}`);
+    }
+
+    const payload = await response.json();
+    const amount = Number(payload?.data?.amount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new Error("SOL price response did not include a valid amount");
+    }
+
+    return {
+      solUsdPrice: amount,
+      source: "coinbase-spot",
+      live: true,
+    };
+  } catch (error) {
+    console.error("Failed to fetch live SOL/USD price:", error);
+    return {
+      solUsdPrice: DEFAULT_SOL_USD_PRICE,
+      source: "duan-static-fallback",
+      live: false,
+    };
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+async function getOnlinePresenceCount() {
+  const entries = await kv.getByPrefix("presence:");
+  const now = Date.now();
+
+  return entries.filter((entry: any) => {
+    const lastSeenAt = new Date(entry?.lastSeenAt ?? 0).getTime();
+    return Number.isFinite(lastSeenAt) && now - lastSeenAt <= ONLINE_PRESENCE_WINDOW_MS;
+  }).length;
+}
 
 // Web tarafinda tetiklenen davranislari anlamli odullere baglayan basit
 // achievement matrisi. Profil/stats tarafi bu liste uzerinden normalize edilir.
@@ -941,9 +992,9 @@ app.get("/make-server-5d6242bb/health", async (c) => {
 // Get platform statistics
 app.get("/make-server-5d6242bb/stats/platform", async (c) => {
   try {
-    // Get active users (users who have profiles)
+    // Toplam profil sayisi; gercek "online user" metriği degil.
     const profiles = await kv.getByPrefix("profile:");
-    const activeUsers = profiles.length;
+    const totalProfiles = profiles.length;
 
     // Get total items in all inventories
     const inventoryItems = await kv.getByPrefix("inventory:");
@@ -954,7 +1005,8 @@ app.get("/make-server-5d6242bb/stats/platform", async (c) => {
     const completedTrades = allTrades.filter((trade: any) => trade.status === "completed").length;
 
     return c.json({
-      activeUsers,
+      totalProfiles,
+      activeUsers: totalProfiles,
       totalItems,
       completedTrades,
       lastUpdated: new Date().toISOString(),
@@ -968,6 +1020,8 @@ app.get("/make-server-5d6242bb/stats/platform", async (c) => {
 // Get token price and supply info
 app.get("/make-server-5d6242bb/token/info", async (c) => {
   try {
+    const marketReference = await fetchLiveSolUsdPrice();
+
     // Get or initialize token info
     let tokenInfo = await kv.get("token:info");
 
@@ -979,13 +1033,26 @@ app.get("/make-server-5d6242bb/token/info", async (c) => {
         price: DUAN_TO_SOL_RATE,
         totalSupply: 1000000,
         circulatingSupply: 500000,
+        solUsdPrice: marketReference.solUsdPrice,
+        priceUsd: Number((DUAN_TO_SOL_RATE * marketReference.solUsdPrice).toFixed(6)),
+        priceSource: marketReference.source,
+        livePricing: marketReference.live,
         lastUpdated: new Date().toISOString(),
       };
       await kv.set("token:info", tokenInfo);
-    } else if (tokenInfo.price !== DUAN_TO_SOL_RATE) {
+    } else if (
+      tokenInfo.price !== DUAN_TO_SOL_RATE ||
+      tokenInfo.solUsdPrice !== marketReference.solUsdPrice ||
+      tokenInfo.priceSource !== marketReference.source ||
+      tokenInfo.livePricing !== marketReference.live
+    ) {
       tokenInfo = {
         ...tokenInfo,
         price: DUAN_TO_SOL_RATE,
+        solUsdPrice: marketReference.solUsdPrice,
+        priceUsd: Number((DUAN_TO_SOL_RATE * marketReference.solUsdPrice).toFixed(6)),
+        priceSource: marketReference.source,
+        livePricing: marketReference.live,
         lastUpdated: new Date().toISOString(),
       };
       await kv.set("token:info", tokenInfo);
