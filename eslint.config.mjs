@@ -28,8 +28,17 @@ export default tseslint.config(
         ...globals.deno,
       },
     },
-  }
-  ,
+  },
+  {
+    files: ['scripts/**/*.{js,mjs}', '*.config.{js,mjs}'],
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'module',
+      globals: {
+        ...globals.node,
+      },
+    },
+  },
   {
     files: ['functions/server/**/*.tsx', 'src/app/lib/onchain/**/*.ts'],
     rules: {
