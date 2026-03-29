@@ -1,0 +1,486 @@
+{
+  "version": 1,
+  "generatedAt": "2026-03-29T09:26:22.932Z",
+  "source": "shared/shopCatalog.ts",
+  "schema": "shop-metadata.schema.json",
+  "items": [
+    {
+      "id": "altinbalta",
+      "name": "Altın Balta",
+      "description": "Saf altın kaplaması ve ağır başlığıyla tek darbede savaşın dengesini değiştiren görkemli bir balta.",
+      "category": "Weapons",
+      "rarity": "epic",
+      "imageUrl": "/assets/shop-items/altinbalta.png",
+      "version": 1,
+      "updatedAt": "2026-03-29T09:26:22.932Z"
+    },
+    {
+      "id": "altingogusluk",
+      "name": "Altın Göğüslük",
+      "description": "Parlak yüzeyi kadar sağlam yapısıyla da öne çıkan, seçkin savaşçılara yakışır koruyucu bir zırh.",
+      "category": "Armor",
+      "rarity": "epic",
+      "imageUrl": "/assets/shop-items/altingogusluk.png",
+      "version": 1,
+      "updatedAt": "2026-03-29T09:26:22.932Z"
+    },
+    {
+      "id": "altinhancer",
+      "name": "Altın Hançer",
+      "description": "Hızlı saldırılar ve kritik vuruşlar için tasarlanmış, zarif ama ölümcül bir hançer.",
+      "category": "Weapons",
+      "rarity": "epic",
+      "imageUrl": "/assets/shop-items/altinhancer.png",
+      "version": 1,
+      "updatedAt": "2026-03-29T09:26:22.932Z"
+    },
+    {
+      "id": "altinsavascekici",
+      "name": "Altın Savaş Çekici",
+      "description": "Ağır darbeleriyle savunmaları kıran, ihtişamlı görünümü kadar yıkıcı gücüyle de ünlü bir savaş çekici.",
+      "category": "Weapons",
+      "rarity": "epic",
+      "imageUrl": "/assets/shop-items/altinsavascekici.png",
+      "version": 1,
+      "updatedAt": "2026-03-29T09:26:22.932Z"
+    },
+    {
+      "id": "atankalp",
+      "name": "Atan Kalp",
+      "description": "Nadir yaratıklardan düşen, hâlâ canlıymış gibi titreşen ürkütücü bir koleksiyon malzemesi.",
+      "category": "Materials",
+      "rarity": "common",
+      "imageUrl": "/assets/shop-items/atankalp.png",
+      "version": 1,
+      "updatedAt": "2026-03-29T09:26:22.932Z"
+    },
+    {
+      "id": "balikkilcigi",
+      "name": "Balık Kılçığı",
+      "description": "Basit görünse de zanaat tariflerinde ve yan görevlerde sıkça kullanılan hafif bir malzeme.",
+      "category": "Materials",
+      "rarity": "common",
+      "imageUrl": "/assets/shop-items/balikkilcigi.png",
+      "version": 1,
+      "updatedAt": "2026-03-29T09:26:22.932Z"
+    },
+    {
+      "id": "balta",
+      "name": "Balta",
+      "description": "Dayanıklı sapı ve dengeli ağırlığıyla yakın dövüşte güven veren klasik bir balta.",
+      "category": "Weapons",
+      "rarity": "rare",
+      "imageUrl": "/assets/shop-items/balta.png",
+      "version": 1,
+      "updatedAt": "2026-03-29T09:26:22.932Z"
+    },
+    {
+      "id": "basitkilic",
+      "name": "Basit Kılıç",
+      "description": "Yeni başlayan maceracıların ilk savaşlarında güvenle kullanabileceği sade ama sağlam bir kılıç.",
+      "category": "Weapons",
+      "rarity": "common",
+      "imageUrl": "/assets/shop-items/basitkilic.png",
+      "version": 1,
+      "updatedAt": "2026-03-29T09:26:22.932Z"
+    },
+    {
+      "id": "berserkerarmor",
+      "name": "Berserker Armor",
+      "description": "Savunmadan çok saldırıya oynayan savaşçılar için dövüş ateşini yükselten efsanevi bir zırh.",
+      "category": "Armor",
+      "rarity": "legendary",
+      "imageUrl": "/assets/shop-items/Berserker_Armor.png",
+      "version": 1,
+      "updatedAt": "2026-03-29T09:26:22.932Z"
+    },
+    {
+      "id": "coin",
+      "name": "Coin",
+      "description": "Takas, görev ödülü ve koleksiyon sistemlerinde temel değer birimi olarak görülen simgesel bir para parçası.",
+      "category": "Materials",
+      "rarity": "common",
+      "imageUrl": "/assets/shop-items/coin.png",
+      "version": 1,
+      "updatedAt": "2026-03-29T09:26:22.932Z"
+    },
+    {
+      "id": "ciftbaslibalta",
+      "name": "Çift Başlı Balta",
+      "description": "İki ağızlı yapısıyla geniş savuruşlar yapan, yüksek hasarlı ve korkutucu bir savaş baltası.",
+      "category": "Weapons",
+      "rarity": "rare",
+      "imageUrl": "/assets/shop-items/ciftbaslibalta.png",
+      "version": 1,
+      "updatedAt": "2026-03-29T09:26:22.932Z"
+    },
+    {
+      "id": "dekoratifkilic",
+      "name": "Dekoratif Kılıç",
+      "description": "Savaş alanından çok asalet ve gösteriş için tasarlanmış, göz alıcı bir koleksiyon kılıcı.",
+      "category": "Weapons",
+      "rarity": "rare",
+      "imageUrl": "/assets/shop-items/dekoratifkilic.png",
+      "version": 1,
+      "updatedAt": "2026-03-29T09:26:22.932Z"
+    },
+    {
+      "id": "demirgogusluk",
+      "name": "Demir Göğüslük",
+      "description": "Ön saflarda savaşanlar için hazırlanmış, sağlamlığıyla öne çıkan orta seviye bir göğüs zırhı.",
+      "category": "Armor",
+      "rarity": "rare",
+      "imageUrl": "/assets/shop-items/demirgogusluk.png",
+      "version": 1,
+      "updatedAt": "2026-03-29T09:26:22.932Z"
+    },
+    {
+      "id": "derigogusluk",
+      "name": "Deri Göğüslük",
+      "description": "Hafif yapısı sayesinde hareket kabiliyetini korurken temel koruma sağlayan esnek bir zırh parçası.",
+      "category": "Armor",
+      "rarity": "rare",
+      "imageUrl": "/assets/shop-items/derigogusluk.png",
+      "version": 1,
+      "updatedAt": "2026-03-29T09:26:22.932Z"
+    },
+    {
+      "id": "devdekoratifkilic",
+      "name": "Dev Dekoratif Kılıç",
+      "description": "Boyutuyla dikkat çeken, gücün ve statünün sembolü hâline gelmiş devasa bir prestij silahı.",
+      "category": "Weapons",
+      "rarity": "legendary",
+      "imageUrl": "/assets/shop-items/devdekoratifkilic.png",
+      "version": 1,
+      "updatedAt": "2026-03-29T09:26:22.932Z"
+    },
+    {
+      "id": "direncyuzugu",
+      "name": "Direnç Yüzüğü",
+      "description": "Taşıyana savunma ve dayanıklılık kazandıran, savaşta ayakta kalmayı kolaylaştıran bir yüzük.",
+      "category": "Accessories",
+      "rarity": "rare",
+      "imageUrl": "/assets/shop-items/direncyuzugu.png",
+      "version": 1,
+      "updatedAt": "2026-03-29T09:26:22.932Z"
+    },
+    {
+      "id": "dondurmaiksiri",
+      "name": "Dondurma İksiri",
+      "description": "Düşmanların hareketlerini ağırlaştıran soğuk özlü bir iksir.",
+      "category": "Consumables",
+      "rarity": "common",
+      "imageUrl": "/assets/shop-items/dondurmaiksiri.png",
+      "version": 1,
+      "updatedAt": "2026-03-29T09:26:22.932Z"
+    },
+    {
+      "id": "crimsonbeherit",
+      "name": "Crimson Beherit",
+      "description": "Kan kırmızısı yüzeyinde gizemli izler taşıyan, büyük güç ve uğursuz kaderle anılan nadir bir kutsal emanet.",
+      "category": "Materials",
+      "rarity": "legendary",
+      "imageUrl": "/assets/shop-items/Crimson Beherit.png",
+      "version": 1,
+      "updatedAt": "2026-03-29T09:26:22.932Z"
+    },
+    {
+      "id": "dragonslayer",
+      "name": "Dragon Slayer",
+      "description": "Dev yaratıklar ve patron savaşları için dövülmüş, efsanelere konu olmuş bir silah.",
+      "category": "Weapons",
+      "rarity": "legendary",
+      "imageUrl": "/assets/shop-items/DragonSlayer.png",
+      "version": 1,
+      "updatedAt": "2026-03-29T09:26:22.932Z"
+    },
+    {
+      "id": "et",
+      "name": "Et",
+      "description": "Yemek tariflerinde, görev zincirlerinde ve temel hayatta kalma sistemlerinde kullanılabilen taze bir kaynak.",
+      "category": "Materials",
+      "rarity": "common",
+      "imageUrl": "/assets/shop-items/et.png",
+      "version": 1,
+      "updatedAt": "2026-03-29T09:26:22.932Z"
+    },
+    {
+      "id": "evlilikyuzugu",
+      "name": "Evlilik Yüzüğü",
+      "description": "Rol yapma ve koleksiyon odaklı oyuncuların gözdesi olan zarif ve anlam yüklü bir yüzük.",
+      "category": "Accessories",
+      "rarity": "rare",
+      "imageUrl": "/assets/shop-items/evlilikyuzugu.png",
+      "version": 1,
+      "updatedAt": "2026-03-29T09:26:22.932Z"
+    },
+    {
+      "id": "gargara",
+      "name": "Gargara",
+      "description": "Sıradan görünmesine rağmen geçici durum etkileriyle ilişkilendirilen ilginç bir tüketim eşyası.",
+      "category": "Consumables",
+      "rarity": "common",
+      "imageUrl": "/assets/shop-items/gargara.png",
+      "version": 1,
+      "updatedAt": "2026-03-29T09:26:22.932Z"
+    },
+    {
+      "id": "guckolyesi",
+      "name": "Güç Kolyesi",
+      "description": "Fiziksel saldırıları destekleyen, savaşçı sınıflar için değerli bir güç kolyesi.",
+      "category": "Accessories",
+      "rarity": "rare",
+      "imageUrl": "/assets/shop-items/guckolyesi.png",
+      "version": 1,
+      "updatedAt": "2026-03-29T09:26:22.932Z"
+    },
+    {
+      "id": "gucluaskiksiri",
+      "name": "Güçlü Aşk İksiri",
+      "description": "Nadir bulunan, etkisi uzun süren ve sıradan iksirlerden çok daha güçlü bir karışım.",
+      "category": "Consumables",
+      "rarity": "epic",
+      "imageUrl": "/assets/shop-items/gucluaskiksiri.png",
+      "version": 1,
+      "updatedAt": "2026-03-29T09:26:22.932Z"
+    },
+    {
+      "id": "guclucaniksiri",
+      "name": "Güçlü Can İksiri",
+      "description": "Zorlu savaşlarda büyük miktarda iyileştirme sağlayan üst seviye bir can iksiri.",
+      "category": "Consumables",
+      "rarity": "epic",
+      "imageUrl": "/assets/shop-items/guclucaniksiri.png",
+      "version": 1,
+      "updatedAt": "2026-03-29T09:26:22.932Z"
+    },
+    {
+      "id": "guclusuratiksiri",
+      "name": "Güçlü Sürat İksiri",
+      "description": "Kısa süreliğine hareket ve saldırı temposunu belirgin biçimde artıran gelişmiş bir iksir.",
+      "category": "Consumables",
+      "rarity": "epic",
+      "imageUrl": "/assets/shop-items/guclusuratiksiri.png",
+      "version": 1,
+      "updatedAt": "2026-03-29T09:26:22.932Z"
+    },
+    {
+      "id": "gucyuzugu",
+      "name": "Güç Yüzüğü",
+      "description": "Yakın dövüş odaklı karakterlerin hasar potansiyelini yükselten kuvvetli bir aksesuar.",
+      "category": "Accessories",
+      "rarity": "rare",
+      "imageUrl": "/assets/shop-items/gucyuzugu.png",
+      "version": 1,
+      "updatedAt": "2026-03-29T09:26:22.932Z"
+    },
+    {
+      "id": "hancer",
+      "name": "Hançer",
+      "description": "Hızlı vuruşlar ve çevik manevralar için ideal, hafif yapılı bir yakın dövüş silahı.",
+      "category": "Weapons",
+      "rarity": "rare",
+      "imageUrl": "/assets/shop-items/hancer.png",
+      "version": 1,
+      "updatedAt": "2026-03-29T09:26:22.932Z"
+    },
+    {
+      "id": "hayatkolyesi",
+      "name": "Hayat Kolyesi",
+      "description": "Can havuzunu güçlendirerek savunmacı oyun tarzını destekleyen değerli bir kolye.",
+      "category": "Accessories",
+      "rarity": "rare",
+      "imageUrl": "/assets/shop-items/hayatkolyesi.png",
+      "version": 1,
+      "updatedAt": "2026-03-29T09:26:22.932Z"
+    },
+    {
+      "id": "hirsizeldiveni",
+      "name": "Hırsız Eldiveni",
+      "description": "Sessiz hareket etmeyi ve çevik oyun stilini destekleyen, ustalık isteyen bir ekipman.",
+      "category": "Accessories",
+      "rarity": "rare",
+      "imageUrl": "/assets/shop-items/hirsizeldiveni.png",
+      "version": 1,
+      "updatedAt": "2026-03-29T09:26:22.932Z"
+    },
+    {
+      "id": "kafatasi",
+      "name": "Kafatası",
+      "description": "Karanlık bölgelerden toplanan, büyüsel ritüeller ve koleksiyonlar için aranan bir kalıntı.",
+      "category": "Materials",
+      "rarity": "common",
+      "imageUrl": "/assets/shop-items/kafatasi.png",
+      "version": 1,
+      "updatedAt": "2026-03-29T09:26:22.932Z"
+    },
+    {
+      "id": "kayanyildiz",
+      "name": "Kayan Yıldız",
+      "description": "Göksel enerjiyi içinde barındıran, büyü ve görev sistemlerinde değerli sayılan nadir bir materyal.",
+      "category": "Materials",
+      "rarity": "epic",
+      "imageUrl": "/assets/shop-items/kayanyildiz.png",
+      "version": 1,
+      "updatedAt": "2026-03-29T09:26:22.932Z"
+    },
+    {
+      "id": "kehanet",
+      "name": "Kehanet",
+      "description": "Gizemli gücüyle dikkat çeken, koleksiyoncuların peşine düştüğü özel bir parça.",
+      "category": "Materials",
+      "rarity": "epic",
+      "imageUrl": "/assets/shop-items/kehanet.png",
+      "version": 1,
+      "updatedAt": "2026-03-29T09:26:22.932Z"
+    },
+    {
+      "id": "kralintaci",
+      "name": "Kralın Tacı",
+      "description": "Prestij, güç ve soyluluğu temsil eden; en seçkin oyunculara hitap eden görkemli bir taç.",
+      "category": "Accessories",
+      "rarity": "legendary",
+      "imageUrl": "/assets/shop-items/kralintaci.png",
+      "version": 1,
+      "updatedAt": "2026-03-29T09:26:22.932Z"
+    },
+    {
+      "id": "kurtkemigi",
+      "name": "Kurt Kemiği",
+      "description": "Vahşi yaratıklardan elde edilen, üretim tariflerinde sıkça aranan temel bir kemik parçası.",
+      "category": "Materials",
+      "rarity": "common",
+      "imageUrl": "/assets/shop-items/kurtkemigi.png",
+      "version": 1,
+      "updatedAt": "2026-03-29T09:26:22.932Z"
+    },
+    {
+      "id": "manaiksiri",
+      "name": "Mana İksiri",
+      "description": "Büyü gücünü tazeleyerek savaşın ortasında bile yetenek kullanımını sürdüren bir iksir.",
+      "category": "Consumables",
+      "rarity": "rare",
+      "imageUrl": "/assets/shop-items/manaiksiri.png",
+      "version": 1,
+      "updatedAt": "2026-03-29T09:26:22.932Z"
+    },
+    {
+      "id": "parakolyesi",
+      "name": "Para Kolyesi",
+      "description": "Servet ve ganimet temasını taşıyan, ekonomi odaklı oyuncular için dikkat çekici bir aksesuar.",
+      "category": "Accessories",
+      "rarity": "rare",
+      "imageUrl": "/assets/shop-items/parakolyesi.png",
+      "version": 1,
+      "updatedAt": "2026-03-29T09:26:22.932Z"
+    },
+    {
+      "id": "savascekici",
+      "name": "Savaş Çekici",
+      "description": "Ağır vuruşları seven savaşçılar için dengeli ve güvenilir bir klasik çekiç.",
+      "category": "Weapons",
+      "rarity": "rare",
+      "imageUrl": "/assets/shop-items/savascekici.png",
+      "version": 1,
+      "updatedAt": "2026-03-29T09:26:22.932Z"
+    },
+    {
+      "id": "ustunciftbaslibalta",
+      "name": "Üstün Çift Başlı Balta",
+      "description": "Usta savaşçılar için geliştirilmiş, yıkıcı gücüyle efsane statüsüne ulaşmış çift başlı bir balta.",
+      "category": "Weapons",
+      "rarity": "legendary",
+      "imageUrl": "/assets/shop-items/ustunciftbaslibalta.png",
+      "version": 1,
+      "updatedAt": "2026-03-29T09:26:22.932Z"
+    },
+    {
+      "id": "ustundemirgogusluk",
+      "name": "Üstün Demir Göğüslük",
+      "description": "En sert darbeleri karşılamak için dövülmüş, üst düzey koruma sağlayan ağır bir zırh.",
+      "category": "Armor",
+      "rarity": "legendary",
+      "imageUrl": "/assets/shop-items/ustundemirgogusluk.png",
+      "version": 1,
+      "updatedAt": "2026-03-29T09:26:22.932Z"
+    },
+    {
+      "id": "yabaniksiri",
+      "name": "Yaban İksiri",
+      "description": "Doğanın ham gücünü taşıyan, temel etkiler sunan sade ama kullanışlı bir iksir.",
+      "category": "Consumables",
+      "rarity": "common",
+      "imageUrl": "/assets/shop-items/yabaniksiri.png",
+      "version": 1,
+      "updatedAt": "2026-03-29T09:26:22.932Z"
+    },
+    {
+      "id": "zayifaskiksiri",
+      "name": "Zayıf Aşk İksiri",
+      "description": "Erken oyunda kullanılan, hafif etkili ve eğlenceli bir özel iksir.",
+      "category": "Consumables",
+      "rarity": "common",
+      "imageUrl": "/assets/shop-items/zayifaskiksiri.png",
+      "version": 1,
+      "updatedAt": "2026-03-29T09:26:22.932Z"
+    },
+    {
+      "id": "zayifcaniksiri",
+      "name": "Zayıf Can İksiri",
+      "description": "Başlangıç seviyesinde temel iyileştirme sağlayan güvenilir bir can iksiri.",
+      "category": "Consumables",
+      "rarity": "common",
+      "imageUrl": "/assets/shop-items/zayifcaniksiri.png",
+      "version": 1,
+      "updatedAt": "2026-03-29T09:26:22.932Z"
+    },
+    {
+      "id": "zayifsuratiksiri",
+      "name": "Zayıf Sürat İksiri",
+      "description": "Kısa süreli küçük bir hız avantajı sağlayan başlangıç seviyesi bir karışım.",
+      "category": "Consumables",
+      "rarity": "common",
+      "imageUrl": "/assets/shop-items/zayifsuratiksiri.png",
+      "version": 1,
+      "updatedAt": "2026-03-29T09:26:22.932Z"
+    },
+    {
+      "id": "zehirsisesi",
+      "name": "Zehir Şişesi",
+      "description": "Zehir etkili saldırılar ve durum hasarı odaklı stratejiler için kullanılabilecek keskin bir karışım.",
+      "category": "Consumables",
+      "rarity": "common",
+      "imageUrl": "/assets/shop-items/zehirsisesi.png",
+      "version": 1,
+      "updatedAt": "2026-03-29T09:26:22.932Z"
+    },
+    {
+      "id": "zenginlikyuzugu",
+      "name": "Zenginlik Yüzüğü",
+      "description": "Servet, ganimet ve prestij temasını bir araya getiren güçlü ve göz alıcı bir yüzük.",
+      "category": "Accessories",
+      "rarity": "epic",
+      "imageUrl": "/assets/shop-items/zenginlikyuzugu.png",
+      "version": 1,
+      "updatedAt": "2026-03-29T09:26:22.932Z"
+    },
+    {
+      "id": "zerafetyuzugu",
+      "name": "Zerafet Yüzüğü",
+      "description": "İnce işçiliği ve şık görünümüyle koleksiyon değeri taşıyan zarif bir yüzük.",
+      "category": "Accessories",
+      "rarity": "epic",
+      "imageUrl": "/assets/shop-items/zerafetyuzugu.png",
+      "version": 1,
+      "updatedAt": "2026-03-29T09:26:22.932Z"
+    }
+  ],
+  "legacyIds": [
+    "cosmic-blade",
+    "stellar-shield",
+    "nebula-potion",
+    "space-helmet",
+    "quantum-gauntlets",
+    "crystal-amulet"
+  ]
+}

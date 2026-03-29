@@ -76,7 +76,7 @@ const translations: Translations = {
   'feature.forum.title': { tr: 'Forum', en: 'Forum' },
   'feature.forum.desc': { tr: 'Başarılarını paylaş, topluluğa katıl', en: 'Share achievements, join the community' },
   'feature.shop.title': { tr: 'Mağaza', en: 'Shop' },
-  'feature.shop.desc': { tr: 'DUAN token ile item satın al', en: 'Purchase items with DUAN tokens' },
+  'feature.shop.desc': { tr: 'DUAN oyun para birimi ile item satın al', en: 'Purchase items with DUAN game currency' },
   'feature.market.title': { tr: 'Pazar', en: 'Market' },
   'feature.market.desc': { tr: 'Diğer oyuncularla takas yap', en: 'Trade with other players' },
   'feature.profile.title': { tr: 'Profil', en: 'Profile' },
@@ -115,7 +115,7 @@ const translations: Translations = {
   
   // Shop
   'shop.title': { tr: 'Mağaza', en: 'Shop' },
-  'shop.subtitle': { tr: 'DUAN token ile item satın al', en: 'Purchase items with DUAN tokens' },
+  'shop.subtitle': { tr: 'DUAN oyun para birimi ile item satın al', en: 'Purchase items with DUAN game currency' },
   'shop.tokenBalance': { tr: 'Token Bakiyesi:', en: 'Token Balance:' },
   'shop.price': { tr: 'Fiyat:', en: 'Price:' },
   'shop.stock': { tr: 'Stok:', en: 'Stock:' },

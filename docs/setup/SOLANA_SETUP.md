@@ -30,9 +30,9 @@ Beklenen davranis:
 - Frontend public key uzerinden Solana baglantisini kurar
 - Yazma islerinde gerekli yerlerde mesaj imzasi alinir
 
-## 3. DUAN Token Gosterimi
+## 3. DUAN Oyun Para Birimi
 
-Uygulama ekonomik gostergelerde DUAN token degerini ortak sabitten okur:
+Uygulama ekonomik gostergelerde DUAN oyun para birimini ortak sabitten okur:
 
 - `shared/duanEconomy.ts`
 
@@ -59,14 +59,14 @@ Pratikte:
 - On-chain veri arkada denenir
 - RPC gecikirse sayfa loading'de asili kalmaz
 
-## 5. Token Mint Adresi
+## 5. Opsiyonel SPL Mirror Mint Adresi
 
-`VITE_SOLANA_TOKEN_MINT` tanimlanirsa frontend DUAN/SPL bakiyesini zincirden okuyabilir.
+`VITE_SOLANA_TOKEN_MINT` tanimlanirsa frontend DUAN icin opsiyonel SPL mirror bakiyesini zincirden okuyabilir.
 
 Tanimli degilse:
 
 - UI yine acilir
-- token bakiyesi gercek zincirden okunmaz
+- opsiyonel SPL mirror bakiyesi gercek zincirden okunmaz
 - uygulama fallback davranisla devam eder
 
 ## 6. Anchor / Program Katmani
@@ -97,5 +97,5 @@ Demo gunu icin onerilen minimum ayar:
 
 - Tek bir kararlı RPC URL kullanin
 - Devnet wallet'ta yeterli SOL bulundurun
-- Kullanilan token mint adresini ekip icinde sabitleyin
+- Eger SPL mirror kullaniyorsaniz mint adresini ekip icinde sabitleyin
 - Shop ve market akisini demo oncesi ayni environment ile en az bir kez bastan test edin

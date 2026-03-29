@@ -1,6 +1,7 @@
 import { Hono } from "npm:hono@4";
 import { cors } from "npm:hono@4/cors";
 import { logger } from "npm:hono@4/logger";
+import { Buffer } from "node:buffer";
 import nacl from "npm:tweetnacl@1.0.3";
 import anchor, { type Idl } from "npm:@coral-xyz/anchor@0.32.1";
 import { PublicKey } from "npm:@solana/web3.js@1.98.4";
@@ -28,6 +29,7 @@ const XP_PER_LEVEL = 120;
 const DUAN_SHOP_ACHIEVEMENT_BYTES = 32;
 const DEFAULT_SOL_USD_PRICE = 0;
 const ONLINE_PRESENCE_WINDOW_MS = 2 * 60 * 1000;
+const UNITY_EDITOR_DEV_AUTH_SECRET = Deno.env.get("UNITY_EDITOR_DEV_AUTH_SECRET") ?? "";
 const DUAN_SHOP_PROGRAM_ID = new anchor.web3.PublicKey(
   Deno.env.get("DUAN_SHOP_PROGRAM_ID") ?? duanShopIdl.address,
 );
@@ -227,9 +229,30 @@ function createTranslationCacheKey(scope: "post" | "comment", id: string, field:
 function getRuntimeSolanaConfig() {
   return {
     duanToSolRate: DUAN_TO_SOL_RATE,
+    currencyModel: "offchain-game-currency-with-optional-spl-mirror",
     tokenMint: Deno.env.get("SOLANA_TOKEN_MINT") ?? Deno.env.get("VITE_SOLANA_TOKEN_MINT") ?? null,
     treasury: Deno.env.get("DUAN_SHOP_TREASURY") ?? null,
     programId: Deno.env.get("DUAN_SHOP_PROGRAM_ID") ?? null,
+  };
+}
+
+function buildShopMetadataManifest() {
+  return {
+    version: 1,
+    generatedAt: new Date().toISOString(),
+    source: "shared/shopCatalog.ts",
+    schema: "shop-metadata.schema.json",
+    items: SHOP_ITEM_CATALOG.map((item) => ({
+      id: item.id,
+      name: item.name,
+      description: item.description,
+      category: item.category,
+      rarity: item.rarity,
+      imageUrl: item.imageUrl,
+      version: 1,
+      updatedAt: new Date().toISOString(),
+    })),
+    legacyIds: LEGACY_SHOP_ITEM_IDS,
   };
 }
 
@@ -644,8 +667,9 @@ async function verifyWalletAuth(c: any, expectedAction: string, expectedWalletAd
   const walletAddress = c.req.header("x-wallet-address");
   const signatureBase64 = c.req.header("x-wallet-signature");
   const rawMessage = c.req.header("x-wallet-message");
+  const editorDevAuth = c.req.header("x-duan-dev-auth");
 
-  if (!walletAddress || !signatureBase64 || !rawMessage) {
+  if (!walletAddress || !rawMessage) {
     return { ok: false, status: 401, error: "Missing wallet authentication headers" };
   }
 
@@ -668,6 +692,18 @@ async function verifyWalletAuth(c: any, expectedAction: string, expectedWalletAd
 
   if (Date.now() - claims.timestamp > AUTH_MAX_AGE_MS) {
     return { ok: false, status: 401, error: "Wallet message has expired" };
+  }
+
+  if (
+    UNITY_EDITOR_DEV_AUTH_SECRET &&
+    editorDevAuth &&
+    editorDevAuth === UNITY_EDITOR_DEV_AUTH_SECRET
+  ) {
+    return { ok: true, mode: "editor-dev-auth" };
+  }
+
+  if (!signatureBase64) {
+    return { ok: false, status: 401, error: "Missing wallet signature" };
   }
 
   try {
@@ -812,6 +848,7 @@ app.use(
       "x-wallet-address",
       "x-wallet-message",
       "x-wallet-signature",
+      "x-duan-dev-auth",
       "x-admin-token",
     ],
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
@@ -1115,6 +1152,15 @@ app.get("/make-server-5d6242bb/bootstrap/config", async (c) => {
   }
 });
 
+app.get("/make-server-5d6242bb/shop/metadata-manifest", async (c) => {
+  try {
+    return c.json(buildShopMetadataManifest());
+  } catch (error) {
+    console.error("Error fetching shop metadata manifest:", error);
+    return c.json({ error: "Failed to fetch shop metadata manifest" }, 500);
+  }
+});
+
 // ========== PROFILE ROUTES ==========
 
 // Get user profile
@@ -1223,6 +1269,54 @@ app.get("/make-server-5d6242bb/profile/:walletAddress/stats", async (c) => {
   } catch (error) {
     console.error("Error fetching stats:", error);
     return c.json({ error: "Failed to fetch stats" }, 500);
+  }
+});
+
+app.get("/make-server-5d6242bb/leaderboard", async (c) => {
+  try {
+    const limit = Math.min(Math.max(Number(c.req.query("limit") ?? 25), 1), 100);
+    const profiles = await kv.getByPrefix("profile:");
+    const statsEntries = await kv.getByPrefix("stats:");
+
+    const leaderboard = statsEntries
+      .map((stats: any) => {
+        const walletAddress = stats?.walletAddress ?? stats?.playerId ?? null;
+        const profile = profiles.find((entry: any) => entry.walletAddress === walletAddress) ?? null;
+
+        return {
+          walletAddress,
+          username: profile?.username ?? (walletAddress ? `Player_${walletAddress.slice(0, 4)}` : "Unknown"),
+          level: Number(stats?.level ?? 1),
+          xp: Number(stats?.xp ?? 0),
+          totalItems: Number(stats?.totalItems ?? 0),
+          totalTrades: Number(stats?.totalTrades ?? 0),
+          totalPosts: Number(stats?.totalPosts ?? 0),
+          rewardDuanEarned: Number(stats?.rewardDuanEarned ?? 0),
+          rewardSolEarned: Number(stats?.rewardSolEarned ?? 0),
+        };
+      })
+      .filter((entry: any) => Boolean(entry.walletAddress))
+      .sort((a: any, b: any) =>
+        b.level - a.level ||
+        b.xp - a.xp ||
+        b.totalItems - a.totalItems ||
+        b.totalTrades - a.totalTrades ||
+        b.totalPosts - a.totalPosts
+      )
+      .slice(0, limit)
+      .map((entry: any, index: number) => ({
+        rank: index + 1,
+        ...entry,
+      }));
+
+    return c.json({
+      generatedAt: new Date().toISOString(),
+      total: leaderboard.length,
+      entries: leaderboard,
+    });
+  } catch (error) {
+    console.error("Error fetching leaderboard:", error);
+    return c.json({ error: "Failed to fetch leaderboard" }, 500);
   }
 });
 
@@ -1608,6 +1702,24 @@ app.post("/make-server-5d6242bb/market/listings", async (c) => {
     const offeredInventoryItem = await findInventoryItem(data.sellerWallet, data.offeredItemId);
     if (!offeredInventoryItem) {
       return c.json({ error: "Offered inventory item not found" }, 404);
+    }
+
+    const availableQuantity = Math.max(1, Number(offeredInventoryItem.quantity ?? 1));
+    const activeListings = await kv.getByPrefix("listing:");
+    const reservedQuantity = activeListings.reduce((count: number, listing: any) => {
+      if (listing?.status !== "active" || listing?.sellerWallet !== data.sellerWallet) {
+        return count;
+      }
+
+      if (listing?.offeredItemId === offeredInventoryItem.id || listing?.offeredItem?.id === offeredInventoryItem.item?.id) {
+        return count + 1;
+      }
+
+      return count;
+    }, 0);
+
+    if (reservedQuantity >= availableQuantity) {
+      return c.json({ error: "No remaining quantity is available for a new listing" }, 409);
     }
 
     const offeredItem = offeredInventoryItem.item || {
@@ -2099,6 +2211,96 @@ app.post("/make-server-5d6242bb/game/sync", async (c) => {
   } catch (error) {
     console.error("Error syncing game data:", error);
     return c.json({ error: "Failed to sync game data" }, 500);
+  }
+});
+
+app.post("/make-server-5d6242bb/game/inventory-sync", async (c) => {
+  try {
+    const { walletAddress, inventoryItems, allowEmptySnapshot } = await c.req.json();
+    const auth = await verifyWalletAuth(c, "game:inventory_sync", walletAddress);
+    if (!auth.ok) {
+      return c.json({ error: auth.error }, auth.status);
+    }
+
+    if (!Array.isArray(inventoryItems)) {
+      return c.json({ error: "inventoryItems must be an array" }, 400);
+    }
+
+    const currentInventory = await kv.getByPrefix(`inventory:${walletAddress}:`);
+    const normalizedEntries = Array.isArray(inventoryItems)
+      ? inventoryItems
+          .map((entry: any) => ({
+            itemId: String(entry?.itemId ?? "").trim(),
+            quantity: Math.max(0, Number(entry?.quantity ?? 0)),
+          }))
+          .filter((entry: { itemId: string; quantity: number }) => entry.itemId && entry.quantity > 0)
+      : [];
+
+    if (!allowEmptySnapshot && normalizedEntries.length === 0 && currentInventory.length > 0) {
+      const preservedItemCount = currentInventory.reduce((count: number, entry: any) =>
+        count + Math.max(0, Number(entry?.quantity ?? 0)), 0);
+
+      return c.json({
+        synced: false,
+        skippedEmptySnapshot: true,
+        preservedStackCount: currentInventory.length,
+        preservedItemCount,
+      });
+    }
+
+    await Promise.all(currentInventory.map((entry: any) => {
+      if (!entry?.id) {
+        return Promise.resolve();
+      }
+
+      return kv.del(`inventory:${walletAddress}:${entry.id}`);
+    }));
+
+    let syncedItemCount = 0;
+    let syncedStackCount = 0;
+
+    for (const entry of normalizedEntries) {
+      const { itemId, quantity } = entry;
+      const item = await getShopItemById(itemId);
+      if (!item) {
+        console.warn(`Unknown itemId from inventory sync skipped: ${itemId}`);
+        continue;
+      }
+
+      const inventoryItem = {
+        id: `unity_${itemId}`,
+        walletAddress,
+        item,
+        acquiredAt: new Date().toISOString(),
+        source: "unity_snapshot",
+        quantity,
+      };
+
+      await kv.set(`inventory:${walletAddress}:${inventoryItem.id}`, inventoryItem);
+      syncedStackCount += 1;
+      syncedItemCount += quantity;
+    }
+
+    const stats = await getOrCreateStats(walletAddress);
+    const normalizedStats = await saveStatsWithAchievements(walletAddress, {
+      ...stats,
+      totalItems: syncedItemCount,
+    });
+    const onchainProfile = await syncPlayerProfileOnchain(walletAddress, normalizedStats);
+
+    return c.json({
+      synced: true,
+      syncedStackCount,
+      syncedItemCount,
+      onchainProfileSynced: onchainProfile.synced,
+      onchainProfileSkipped: onchainProfile.skipped ?? false,
+      onchainProfileSignature: onchainProfile.signature ?? null,
+      onchainProfileAddress: onchainProfile.playerProfile ?? null,
+      onchainProfileError: onchainProfile.error ?? null,
+    });
+  } catch (error) {
+    console.error("Error syncing inventory snapshot:", error);
+    return c.json({ error: "Failed to sync inventory snapshot" }, 500);
   }
 });
 

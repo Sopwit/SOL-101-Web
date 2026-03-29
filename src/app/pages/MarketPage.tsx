@@ -12,6 +12,7 @@ import { resolveAssetUrl } from '../lib/assetUrls';
 import { pageDataCache } from '../lib/pageDataCache';
 import { fetchOnchainOwnedItems } from '../lib/onchain/duanShopClient';
 import { cancelOnchainMarketListing, createOnchainTradeIntent, openOnchainMarketListing } from '../lib/onchain/duanMarketClient';
+import { buildMarketAvailableInventoryItems, mergeInventorySources } from '../lib/inventory';
 import { localizeShopItem } from '../lib/shopItemLocalization';
 import { ContentGridSkeleton } from '../components/ContentGridSkeleton';
 import { GlassCard } from '../components/GlassCard';
@@ -71,10 +72,20 @@ export function MarketPage() {
     setInventoryLoading(true);
     try {
       setInventoryError(null);
-      const nextInventory = await fetchOnchainOwnedItems(connection, publicKey);
+      const [backendInventoryResponse, onchainInventory] = await Promise.all([
+        api.getInventory(walletAddress),
+        fetchOnchainOwnedItems(connection, publicKey),
+      ]);
+
+      const nextInventory = mergeInventorySources(
+        onchainInventory,
+        backendInventoryResponse.success && backendInventoryResponse.data ? backendInventoryResponse.data : [],
+      );
+
       setInventoryItems(nextInventory);
+      setInventoryError(backendInventoryResponse.success ? null : (backendInventoryResponse.error || null));
     } catch (error) {
-      reportError('market:onchain-inventory', error, 'On-chain inventory yuklenemedi');
+      reportError('market:inventory', error, 'Market inventory yuklenemedi');
       setInventoryItems([]);
       setInventoryError(error instanceof Error ? error.message : t('common.error'));
     } finally {
@@ -121,7 +132,25 @@ export function MarketPage() {
 
   useEffect(() => {
     void loadInventory();
-  }, [connected, publicKey, connection]);
+  }, [connected, publicKey, connection, walletAddress]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      void loadListings();
+      void loadInventory();
+    }, 15000);
+
+    const handleFocus = () => {
+      void loadListings();
+      void loadInventory();
+    };
+
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [connected, publicKey, walletAddress, language, connection]);
 
   useEffect(() => {
     if (!selectedListing) {
@@ -308,11 +337,11 @@ export function MarketPage() {
   );
 
   const localizedInventoryItems = useMemo(
-    () => inventoryItems.map((inventoryItem) => ({
+    () => buildMarketAvailableInventoryItems(inventoryItems, myListings).map((inventoryItem) => ({
       ...inventoryItem,
       item: localizeShopItem(inventoryItem.item, language),
     })),
-    [inventoryItems, language]
+    [inventoryItems, myListings, language]
   );
 
   const renderWanted = (listing: MarketListing) => {
@@ -343,9 +372,9 @@ export function MarketPage() {
       state: inventoryError ? 'degraded' : 'healthy',
       severity: inventoryError ? 'warning' : 'info',
       title: 'On-Chain Inventory',
-      detail: inventoryError || 'Ilan acilabilir envanter itemlari on-chain hesaptan aliniyor.',
+      detail: inventoryError || 'Ilan acilabilir envanter itemlari backend ve on-chain kaynaklardan birlestirilerek aliniyor.',
       checkedAt: statusCheckedAt || undefined,
-      context: inventoryError ? connection.rpcEndpoint.replace(/^https?:\/\//, '') : `${inventoryItems.length} item hazir`,
+      context: inventoryError ? connection.rpcEndpoint.replace(/^https?:\/\//, '') : `${localizedInventoryItems.length} item hazir`,
     },
     {
       id: 'market-onchain-settlement',
@@ -373,11 +402,11 @@ export function MarketPage() {
             description={t('market.subtitle')}
             accent="from-emerald-400/15 via-lime-300/10 to-cyan-300/15"
             panelTitle="TRADING LAYER"
-            panelBody="Ilan akisi backend uzerinden akar; ilan acmak icin kullanicinin on-chain envanterindeki itemlar kullanilir."
+            panelBody="Ilan akisi backend uzerinden akar; ilan acmak icin cüzdana bagli kalici envanterdeki itemler kullanilir."
             metrics={[
               { label: 'Feed', value: `${listings.length}` },
               { label: 'Mine', value: `${myListings.length}` },
-              { label: 'Inventory', value: `${inventoryItems.length}` },
+              { label: 'Inventory', value: `${localizedInventoryItems.length}` },
             ]}
             actions={(
               <Dialog>
@@ -402,7 +431,7 @@ export function MarketPage() {
                         <SelectContent>
                           {localizedInventoryItems.map((inventoryItem) => (
                             <SelectItem key={inventoryItem.id} value={inventoryItem.item.id}>
-                              {inventoryItem.item.name}
+                              {inventoryItem.item.name} {(inventoryItem.availableQuantity ?? inventoryItem.quantity ?? 1) > 1 ? `x${inventoryItem.availableQuantity}` : ''}
                             </SelectItem>
                           ))}
                         </SelectContent>

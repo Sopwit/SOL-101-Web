@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Database, Search, ShieldCheck, Trash2, Wallet } from 'lucide-react';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { toast } from 'sonner';
@@ -113,6 +113,11 @@ export function OpsPage() {
   const [actingCommentId, setActingCommentId] = useState<string | null>(null);
   const [actingListingId, setActingListingId] = useState<string | null>(null);
   const [actingTradeId, setActingTradeId] = useState<string | null>(null);
+  const adminSessionRef = useRef<AdminSession | null>(adminSession);
+
+  useEffect(() => {
+    adminSessionRef.current = adminSession;
+  }, [adminSession]);
 
   const persistAdminSession = (session: AdminSession | null) => {
     setAdminSession(session);
@@ -128,9 +133,10 @@ export function OpsPage() {
     window.sessionStorage.setItem(ADMIN_SESSION_STORAGE_KEY, JSON.stringify(session));
   };
 
-  const ensureAdminSession = async () => {
-    if (adminSession && new Date(adminSession.expiresAt).getTime() > Date.now()) {
-      return adminSession;
+  const ensureAdminSession = useCallback(async () => {
+    const currentSession = adminSessionRef.current;
+    if (currentSession && new Date(currentSession.expiresAt).getTime() > Date.now()) {
+      return currentSession;
     }
 
     if (!publicKey || !signMessage) {
@@ -149,9 +155,9 @@ export function OpsPage() {
 
     persistAdminSession(response.data);
     return response.data;
-  };
+  }, [publicKey, signMessage]);
 
-  const loadDashboard = async (options?: { silent?: boolean }) => {
+  const loadDashboard = useCallback(async (options?: { silent?: boolean }) => {
     if (!options?.silent) {
       setLoading(true);
     }
@@ -200,7 +206,7 @@ export function OpsPage() {
         setLoading(false);
       }
     }
-  };
+  }, [connection, publicKey, signMessage, ensureAdminSession]);
 
   useEffect(() => {
     void loadDashboard();
@@ -218,7 +224,7 @@ export function OpsPage() {
       window.clearInterval(intervalId);
       window.removeEventListener('focus', handleFocus);
     };
-  }, [connection, publicKey, signMessage]);
+  }, [loadDashboard]);
 
   const statusItems = useMemo<SystemStatusItem[]>(() => {
     const items: SystemStatusItem[] = [];

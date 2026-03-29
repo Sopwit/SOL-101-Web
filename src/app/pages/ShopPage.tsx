@@ -48,7 +48,7 @@ export function ShopPage() {
   const { connected, publicKey } = wallet;
   const { isAdmin } = useAdminAccess();
   const { language, t } = useLanguage();
-  const { tokenBalance } = useStore();
+  const { tokenBalance, solBalance } = useStore();
   const [items, setItems] = useState<ShopItem[]>(() => pageDataCache.shop.items);
   const [searchQuery, setSearchQuery] = useState('');
   const [rarityFilter, setRarityFilter] = useState<string>('all');
@@ -410,6 +410,7 @@ export function ShopPage() {
             metrics={[
               { label: 'Catalog', value: `${items.length}` },
               { label: 'Visible', value: `${filteredItems.length}` },
+              { label: 'SOL', value: `${solBalance.toFixed(2)}` },
               { label: 'DUAN', value: `${Math.round(tokenBalance)}` },
             ]}
             actions={(
@@ -421,7 +422,19 @@ export function ShopPage() {
           />
         )}
       >
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+        <GlassCard className="p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-primary" />
+              <span className="font-medium">SOL {t('wallet.balance')}</span>
+            </div>
+            <div className="text-right">
+              <div className="text-2xl font-bold">{solBalance.toFixed(4)}</div>
+            </div>
+          </div>
+        </GlassCard>
+
         <GlassCard className="p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">

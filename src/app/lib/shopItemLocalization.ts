@@ -17,6 +17,7 @@ const ENGLISH_ITEM_COPY: Record<string, LocalizedCopy> = {
   berserkerarmor: { name: "Berserker Armor", description: "Legendary armor made for fighters who trade caution for relentless aggression." },
   coin: { name: "Coin", description: "A symbolic currency piece tied to rewards, barter, and collectible systems." },
   ciftbaslibalta: { name: "Double-Headed Axe", description: "A fearsome axe with twin blades built for wide swings and heavy damage." },
+  crimsonbeherit: { name: "Crimson Beherit", description: "A blood-red relic etched with ominous markings, tied to immense power and a dark fate." },
   dekoratifkilic: { name: "Decorative Sword", description: "A display-ready blade designed to represent status and style more than practicality." },
   demirgogusluk: { name: "Iron Chestplate", description: "A solid mid-tier chest armor forged for fighters who hold the front line." },
   derigogusluk: { name: "Leather Chestplate", description: "A flexible armor piece that preserves mobility while offering basic protection." },

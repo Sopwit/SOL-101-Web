@@ -45,8 +45,9 @@ function createCatalogItem(item: ShopCatalogItem): ShopCatalogItem {
   };
 }
 
-// Public assets use ASCII slugs so URLs stay stable across macOS, git, Vite
-// and Supabase deployments.
+// Public assets primarily use ASCII slugs so URLs stay stable across macOS,
+// git, Vite and Supabase deployments. Some newly added legacy exports keep
+// their original filenames and are referenced as-is below.
 const BASE_SHOP_ITEM_CATALOG: ShopCatalogItem[] = [
   { id: "altinbalta", name: "Altın Balta", description: "Saf altın kaplaması ve ağır başlığıyla tek darbede savaşın dengesini değiştiren görkemli bir balta.", imageUrl: "/assets/shop-items/altinbalta.png", price: 420, rarity: "epic", stock: 12, category: "Weapons" },
   { id: "altingogusluk", name: "Altın Göğüslük", description: "Parlak yüzeyi kadar sağlam yapısıyla da öne çıkan, seçkin savaşçılara yakışır koruyucu bir zırh.", imageUrl: "/assets/shop-items/altingogusluk.png", price: 360, rarity: "epic", stock: 12, category: "Armor" },
@@ -56,7 +57,7 @@ const BASE_SHOP_ITEM_CATALOG: ShopCatalogItem[] = [
   { id: "balikkilcigi", name: "Balık Kılçığı", description: "Basit görünse de zanaat tariflerinde ve yan görevlerde sıkça kullanılan hafif bir malzeme.", imageUrl: "/assets/shop-items/balikkilcigi.png", price: 60, rarity: "common", stock: 40, category: "Materials" },
   { id: "balta", name: "Balta", description: "Dayanıklı sapı ve dengeli ağırlığıyla yakın dövüşte güven veren klasik bir balta.", imageUrl: "/assets/shop-items/balta.png", price: 240, rarity: "rare", stock: 24, category: "Weapons" },
   { id: "basitkilic", name: "Basit Kılıç", description: "Yeni başlayan maceracıların ilk savaşlarında güvenle kullanabileceği sade ama sağlam bir kılıç.", imageUrl: "/assets/shop-items/basitkilic.png", price: 240, rarity: "common", stock: 40, category: "Weapons" },
-  { id: "berserkerarmor", name: "Berserker Armor", description: "Savunmadan çok saldırıya oynayan savaşçılar için dövüş ateşini yükselten efsanevi bir zırh.", imageUrl: "/assets/shop-items/berserkerarmor.png", price: 540, rarity: "legendary", stock: 5, category: "Armor" },
+  { id: "berserkerarmor", name: "Berserker Armor", description: "Savunmadan çok saldırıya oynayan savaşçılar için dövüş ateşini yükselten efsanevi bir zırh.", imageUrl: "/assets/shop-items/Berserker_Armor.png", price: 540, rarity: "legendary", stock: 5, category: "Armor" },
   { id: "coin", name: "Coin", description: "Takas, görev ödülü ve koleksiyon sistemlerinde temel değer birimi olarak görülen simgesel bir para parçası.", imageUrl: "/assets/shop-items/coin.png", price: 60, rarity: "common", stock: 40, category: "Materials" },
   { id: "ciftbaslibalta", name: "Çift Başlı Balta", description: "İki ağızlı yapısıyla geniş savuruşlar yapan, yüksek hasarlı ve korkutucu bir savaş baltası.", imageUrl: "/assets/shop-items/ciftbaslibalta.png", price: 240, rarity: "rare", stock: 24, category: "Weapons" },
   { id: "dekoratifkilic", name: "Dekoratif Kılıç", description: "Savaş alanından çok asalet ve gösteriş için tasarlanmış, göz alıcı bir koleksiyon kılıcı.", imageUrl: "/assets/shop-items/dekoratifkilic.png", price: 240, rarity: "rare", stock: 24, category: "Weapons" },
@@ -65,7 +66,8 @@ const BASE_SHOP_ITEM_CATALOG: ShopCatalogItem[] = [
   { id: "devdekoratifkilic", name: "Dev Dekoratif Kılıç", description: "Boyutuyla dikkat çeken, gücün ve statünün sembolü hâline gelmiş devasa bir prestij silahı.", imageUrl: "/assets/shop-items/devdekoratifkilic.png", price: 600, rarity: "legendary", stock: 5, category: "Weapons" },
   { id: "direncyuzugu", name: "Direnç Yüzüğü", description: "Taşıyana savunma ve dayanıklılık kazandıran, savaşta ayakta kalmayı kolaylaştıran bir yüzük.", imageUrl: "/assets/shop-items/direncyuzugu.png", price: 300, rarity: "rare", stock: 24, category: "Accessories" },
   { id: "dondurmaiksiri", name: "Dondurma İksiri", description: "Düşmanların hareketlerini ağırlaştıran soğuk özlü bir iksir.", imageUrl: "/assets/shop-items/dondurmaiksiri.png", price: 80, rarity: "common", stock: 40, category: "Consumables" },
-  { id: "dragonslayer", name: "Dragon Slayer", description: "Dev yaratıklar ve patron savaşları için dövülmüş, efsanelere konu olmuş bir silah.", imageUrl: "/assets/shop-items/dragonslayer.png", price: 600, rarity: "legendary", stock: 5, category: "Weapons" },
+  { id: "crimsonbeherit", name: "Crimson Beherit", description: "Kan kırmızısı yüzeyinde gizemli izler taşıyan, büyük güç ve uğursuz kaderle anılan nadir bir kutsal emanet.", imageUrl: "/assets/shop-items/Crimson Beherit.png", price: 580, rarity: "legendary", stock: 5, category: "Materials" },
+  { id: "dragonslayer", name: "Dragon Slayer", description: "Dev yaratıklar ve patron savaşları için dövülmüş, efsanelere konu olmuş bir silah.", imageUrl: "/assets/shop-items/DragonSlayer.png", price: 600, rarity: "legendary", stock: 5, category: "Weapons" },
   { id: "et", name: "Et", description: "Yemek tariflerinde, görev zincirlerinde ve temel hayatta kalma sistemlerinde kullanılabilen taze bir kaynak.", imageUrl: "/assets/shop-items/et.png", price: 60, rarity: "common", stock: 40, category: "Materials" },
   { id: "evlilikyuzugu", name: "Evlilik Yüzüğü", description: "Rol yapma ve koleksiyon odaklı oyuncuların gözdesi olan zarif ve anlam yüklü bir yüzük.", imageUrl: "/assets/shop-items/evlilikyuzugu.png", price: 220, rarity: "rare", stock: 24, category: "Accessories" },
   { id: "gargara", name: "Gargara", description: "Sıradan görünmesine rağmen geçici durum etkileriyle ilişkilendirilen ilginç bir tüketim eşyası.", imageUrl: "/assets/shop-items/gargara.png", price: 80, rarity: "common", stock: 40, category: "Consumables" },

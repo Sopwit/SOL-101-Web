@@ -102,4 +102,4 @@ Eger Anchor programlarda sonradan degisiklik yapildiysa `anchor deploy` da gerek
 - Router `hash` modunda calisir
 - Pages altinda `/home`, `/shop`, `/forum`, `/market`, `/profile`, `/admin` ekranlari acilir
 - Admin panel allowlist wallet ile görünür
-- DUAN token bakiyesi Pages ortaminda dogru mint ile okunur
+- Eger SPL mirror kullaniyorsaniz DUAN bakiyesi Pages ortaminda dogru mint ile okunur

@@ -61,6 +61,7 @@ Unity istemcisi tek cagri ile ortak runtime ayarlarini alabilir.
   },
   "solana": {
     "duanToSolRate": 0.00001,
+    "currencyModel": "offchain-game-currency-with-optional-spl-mirror",
     "tokenMint": "optional-mint",
     "treasury": "optional-treasury",
     "programId": "optional-program-id"

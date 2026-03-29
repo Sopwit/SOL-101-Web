@@ -13,6 +13,7 @@
     "test:smoke": "node --experimental-strip-types --test tests/*.test.mjs",
     "format": "prettier --write \"src/**/*.{ts,tsx,css,md}\"",
     "validate": "bash scripts/validate-project.sh",
+    "metadata:export": "node scripts/export-shop-metadata-snapshot.mjs",
     "solana:build": "anchor build",
     "solana:sync-idl": "node scripts/sync-onchain-idl.mjs",
     "solana:sync-market-idl": "node scripts/sync-onchain-market-idl.mjs",

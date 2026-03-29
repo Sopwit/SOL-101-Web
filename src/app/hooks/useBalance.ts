@@ -50,8 +50,15 @@ export function useBalance() {
 
     getBalance();
 
+    const solSubscriptionId = connection.onAccountChange(publicKey, () => {
+      void getBalance();
+    }, 'confirmed');
+
     const interval = setInterval(getBalance, 30000);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      void connection.removeAccountChangeListener(solSubscriptionId);
+    };
   }, [connected, publicKey, connection, setSolBalance, setTokenBalance]);
 }

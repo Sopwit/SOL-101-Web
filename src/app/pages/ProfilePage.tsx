@@ -24,6 +24,7 @@ import { api } from '../services/api';
 import { useLanguage } from '../contexts/LanguageContext';
 import { pageDataCache } from '../lib/pageDataCache';
 import { reportError } from '../lib/telemetry';
+import { mergeInventorySources } from '../lib/inventory';
 import { ContentGridSkeleton } from '../components/ContentGridSkeleton';
 import { EmptyStateCard, LoadingStateCard, MaintenanceStateCard } from '../components/ModuleStateCard';
 import type { InventoryItem, SystemStatusItem, User } from '../types';
@@ -88,6 +89,7 @@ export function ProfilePage() {
   const [profileSourceErrors, setProfileSourceErrors] = useState({
     backendProfile: null as string | null,
     backendStats: null as string | null,
+    backendInventory: null as string | null,
     onchainInventory: null as string | null,
     onchainProfile: null as string | null,
   });
@@ -103,9 +105,10 @@ export function ProfilePage() {
     setLoading(true);
     try {
       setLoadError(null);
-      const [statsResponse, profileResponse, onchainInventory, onchainProfile] = await Promise.all([
+      const [statsResponse, profileResponse, backendInventoryResponse, onchainInventory, onchainProfile] = await Promise.all([
         api.getProfileStats(walletAddress),
         api.getProfile(walletAddress),
+        api.getInventory(walletAddress),
         fetchOnchainOwnedItems(connection, publicKey),
         fetchOnchainPlayerProfile(connection, publicKey),
       ]);
@@ -119,6 +122,7 @@ export function ProfilePage() {
       setProfileSourceErrors({
         backendProfile: profileResponse.success ? null : (profileResponse.error || 'Backend profil kaydi alinamadi.'),
         backendStats: statsResponse.success ? null : (statsResponse.error || 'Backend profil istatistikleri alinamadi.'),
+        backendInventory: backendInventoryResponse.success ? null : (backendInventoryResponse.error || 'Backend envanteri alinamadi.'),
         onchainInventory: null,
         onchainProfile: profileNotInitializedMessage,
       });
@@ -134,7 +138,9 @@ export function ProfilePage() {
       if (statsResponse.success && statsResponse.data) {
         const nextStats = {
           ...statsResponse.data,
-          totalItems: onchainProfile.exists ? onchainProfile.totalItems : statsResponse.data.totalItems,
+          totalItems: onchainProfile.exists
+            ? Math.max(statsResponse.data.totalItems, onchainProfile.totalItems)
+            : statsResponse.data.totalItems,
           totalTrades: onchainProfile.exists ? onchainProfile.totalTrades : statsResponse.data.totalTrades,
         };
         setStats(nextStats);
@@ -159,7 +165,10 @@ export function ProfilePage() {
         pageDataCache.profile.stats = nextStats;
       }
 
-      const nextInventory = onchainInventory;
+      const nextInventory = mergeInventorySources(
+        onchainInventory,
+        backendInventoryResponse.success && backendInventoryResponse.data ? backendInventoryResponse.data : [],
+      );
       setInventory(nextInventory);
       pageDataCache.profile.walletAddress = walletAddress;
       pageDataCache.profile.inventory = nextInventory;
@@ -329,12 +338,21 @@ export function ProfilePage() {
     {
       id: 'profile-onchain-layer',
       source: 'onchain',
-      state: profileSourceErrors.onchainInventory ? 'degraded' : 'healthy',
-      severity: profileSourceErrors.onchainInventory ? 'warning' : 'info',
-      title: 'On-Chain Progression',
-      detail: profileSourceErrors.onchainInventory || profileSourceErrors.onchainProfile || 'Inventory ve player progression on-chain hesaptan okunuyor.',
+      state: profileSourceErrors.onchainInventory && profileSourceErrors.backendInventory ? 'degraded' : 'healthy',
+      severity: profileSourceErrors.onchainInventory && profileSourceErrors.backendInventory ? 'warning' : 'info',
+      title: 'Unified Inventory',
+      detail:
+        profileSourceErrors.onchainInventory && profileSourceErrors.backendInventory
+          ? `${profileSourceErrors.backendInventory} ${profileSourceErrors.onchainInventory}`
+          : profileSourceErrors.onchainInventory ||
+            profileSourceErrors.backendInventory ||
+            profileSourceErrors.onchainProfile ||
+            'Inventory backend ve on-chain kaynaklari birlestirilerek okunuyor.',
       checkedAt: statusCheckedAt || undefined,
-      context: profileSourceErrors.onchainInventory ? connection.rpcEndpoint.replace(/^https?:\/\//, '') : `${totalInventoryCount} item / ${stats?.level ?? 1}. seviye`,
+      context:
+        profileSourceErrors.onchainInventory && profileSourceErrors.backendInventory
+          ? connection.rpcEndpoint.replace(/^https?:\/\//, '')
+          : `${totalInventoryCount} item / ${stats?.level ?? 1}. seviye`,
     },
   ];
 
@@ -349,7 +367,7 @@ export function ProfilePage() {
               description={t('profile.walletRequiredDesc')}
               accent="from-fuchsia-400/15 via-pink-300/10 to-rose-300/15"
               panelTitle="ACCOUNT SNAPSHOT"
-              panelBody="Kimlik, kozmetik secimleri ve on-chain inventory tek panelde toplanir."
+              panelBody="Kimlik, kozmetik secimleri ve backend ile on-chain inventory tek panelde toplanir."
               metrics={[
                 { label: 'SOL', value: solBalance.toFixed(2) },
                 { label: 'DUAN', value: `${Math.round(tokenBalance)}` },
@@ -360,7 +378,7 @@ export function ProfilePage() {
         >
           <LoadingStateCard
             title="Profil verileri hazirlaniyor"
-            description="Backend profil, reward istatistikleri ve on-chain inventory birlestiriliyor."
+            description="Backend profil, reward istatistikleri ve cift-kaynak inventory birlestiriliyor."
           />
           <ContentGridSkeleton count={3} imageClassName="h-28" contentLines={4} />
         </PageShell>
@@ -384,7 +402,7 @@ export function ProfilePage() {
             description={profile?.bio || t('profile.walletRequiredDesc')}
             accent="from-fuchsia-400/15 via-pink-300/10 to-rose-300/15"
             panelTitle="ACCOUNT SNAPSHOT"
-            panelBody="Kimlik, kozmetik secimleri ve on-chain inventory tek panelde toplanir."
+            panelBody="Kimlik, kozmetik secimleri ve backend ile on-chain inventory tek panelde toplanir."
             metrics={[
               { label: 'SOL', value: solBalance.toFixed(2) },
               { label: 'DUAN', value: `${Math.round(tokenBalance)}` },
