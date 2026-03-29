@@ -1007,7 +1007,7 @@ app.use(
   }),
 );
 
-app.post("/make-server-5d6242bb/native-wallet/session", async (c) => {
+const createNativeWalletSession = async (c: any) => {
   try {
     const payload = await c.req.json().catch(() => ({}));
     const kind = payload?.kind as NativeWalletSessionKind | undefined;
@@ -1037,9 +1037,12 @@ app.post("/make-server-5d6242bb/native-wallet/session", async (c) => {
     console.error("Error creating native wallet session:", error);
     return c.json({ error: "Failed to create native wallet session" }, 500);
   }
-});
+};
 
-app.get("/make-server-5d6242bb/native-wallet/session/:sessionId", async (c) => {
+app.post("/native-wallet/session", createNativeWalletSession);
+app.post("/make-server-5d6242bb/native-wallet/session", createNativeWalletSession);
+
+const getNativeWalletSession = async (c: any) => {
   try {
     const { sessionId } = c.req.param();
     const session = await loadNativeWalletSession(sessionId);
@@ -1052,9 +1055,12 @@ app.get("/make-server-5d6242bb/native-wallet/session/:sessionId", async (c) => {
     console.error("Error loading native wallet session:", error);
     return c.json({ error: "Failed to load native wallet session" }, 500);
   }
-});
+};
 
-app.get("/make-server-5d6242bb/native-wallet/session/:sessionId/result", async (c) => {
+app.get("/native-wallet/session/:sessionId", getNativeWalletSession);
+app.get("/make-server-5d6242bb/native-wallet/session/:sessionId", getNativeWalletSession);
+
+const getNativeWalletSessionResult = async (c: any) => {
   try {
     const { sessionId } = c.req.param();
     const pollToken = c.req.query("token");
@@ -1072,9 +1078,12 @@ app.get("/make-server-5d6242bb/native-wallet/session/:sessionId/result", async (
     console.error("Error loading native wallet session result:", error);
     return c.json({ error: "Failed to load native wallet session result" }, 500);
   }
-});
+};
 
-app.post("/make-server-5d6242bb/native-wallet/session/:sessionId/complete", async (c) => {
+app.get("/native-wallet/session/:sessionId/result", getNativeWalletSessionResult);
+app.get("/make-server-5d6242bb/native-wallet/session/:sessionId/result", getNativeWalletSessionResult);
+
+const completeNativeWalletSession = async (c: any) => {
   try {
     const { sessionId } = c.req.param();
     const session = await loadNativeWalletSession(sessionId);
@@ -1128,9 +1137,12 @@ app.post("/make-server-5d6242bb/native-wallet/session/:sessionId/complete", asyn
     console.error("Error completing native wallet session:", error);
     return c.json({ error: "Failed to complete native wallet session" }, 500);
   }
-});
+};
 
-app.post("/make-server-5d6242bb/native-wallet/session/:sessionId/cancel", async (c) => {
+app.post("/native-wallet/session/:sessionId/complete", completeNativeWalletSession);
+app.post("/make-server-5d6242bb/native-wallet/session/:sessionId/complete", completeNativeWalletSession);
+
+const cancelNativeWalletSession = async (c: any) => {
   try {
     const { sessionId } = c.req.param();
     const session = await loadNativeWalletSession(sessionId);
@@ -1150,7 +1162,10 @@ app.post("/make-server-5d6242bb/native-wallet/session/:sessionId/cancel", async 
     console.error("Error cancelling native wallet session:", error);
     return c.json({ error: "Failed to cancel native wallet session" }, 500);
   }
-});
+};
+
+app.post("/native-wallet/session/:sessionId/cancel", cancelNativeWalletSession);
+app.post("/make-server-5d6242bb/native-wallet/session/:sessionId/cancel", cancelNativeWalletSession);
 
 // Shop katalogu runtime baslangicinda ortak sabitlerden senkronize edilir.
 async function initializeShopItems() {
@@ -1428,7 +1443,7 @@ app.post("/make-server-5d6242bb/presence/heartbeat", async (c) => {
 
 // Unity ve diger istemciler ortak item katalogunu, ekonomi sabitlerini ve
 // Solana baglanti ayarlarini bu endpoint uzerinden okuyabilir.
-app.get("/make-server-5d6242bb/bootstrap/config", async (c) => {
+const getBootstrapConfig = async (c: any) => {
   try {
     return c.json({
       gameplay: {
@@ -1445,7 +1460,10 @@ app.get("/make-server-5d6242bb/bootstrap/config", async (c) => {
     console.error("Error fetching bootstrap config:", error);
     return c.json({ error: "Failed to fetch bootstrap config" }, 500);
   }
-});
+};
+
+app.get("/bootstrap/config", getBootstrapConfig);
+app.get("/make-server-5d6242bb/bootstrap/config", getBootstrapConfig);
 
 app.get("/make-server-5d6242bb/shop/metadata-manifest", async (c) => {
   try {
@@ -1459,7 +1477,7 @@ app.get("/make-server-5d6242bb/shop/metadata-manifest", async (c) => {
 // ========== PROFILE ROUTES ==========
 
 // Get user profile
-app.get("/make-server-5d6242bb/profile/:walletAddress", async (c) => {
+const getProfileRoute = async (c: any) => {
   try {
     const { walletAddress } = c.req.param();
     const profile = await getOrCreateProfile(walletAddress);
@@ -1468,10 +1486,13 @@ app.get("/make-server-5d6242bb/profile/:walletAddress", async (c) => {
     console.error("Error fetching profile:", error);
     return c.json({ error: "Failed to fetch profile" }, 500);
   }
-});
+};
+
+app.get("/profile/:walletAddress", getProfileRoute);
+app.get("/make-server-5d6242bb/profile/:walletAddress", getProfileRoute);
 
 // Update user profile
-app.put("/make-server-5d6242bb/profile/:walletAddress", async (c) => {
+const updateProfileRoute = async (c: any) => {
   try {
     const { walletAddress } = c.req.param();
     const updates = await c.req.json();
@@ -1500,7 +1521,10 @@ app.put("/make-server-5d6242bb/profile/:walletAddress", async (c) => {
     console.error("Error updating profile:", error);
     return c.json({ error: "Failed to update profile" }, 500);
   }
-});
+};
+
+app.put("/profile/:walletAddress", updateProfileRoute);
+app.put("/make-server-5d6242bb/profile/:walletAddress", updateProfileRoute);
 
 app.post("/make-server-5d6242bb/profile/:walletAddress/cosmetics/unlock", async (c) => {
   try {
@@ -1556,7 +1580,7 @@ app.post("/make-server-5d6242bb/profile/:walletAddress/cosmetics/unlock", async 
 });
 
 // Get profile stats
-app.get("/make-server-5d6242bb/profile/:walletAddress/stats", async (c) => {
+const getProfileStatsRoute = async (c: any) => {
   try {
     const { walletAddress } = c.req.param();
     const stats = await getOrCreateStats(walletAddress);
@@ -1565,7 +1589,10 @@ app.get("/make-server-5d6242bb/profile/:walletAddress/stats", async (c) => {
     console.error("Error fetching stats:", error);
     return c.json({ error: "Failed to fetch stats" }, 500);
   }
-});
+};
+
+app.get("/profile/:walletAddress/stats", getProfileStatsRoute);
+app.get("/make-server-5d6242bb/profile/:walletAddress/stats", getProfileStatsRoute);
 
 app.get("/make-server-5d6242bb/leaderboard", async (c) => {
   try {
@@ -1618,7 +1645,7 @@ app.get("/make-server-5d6242bb/leaderboard", async (c) => {
 // ========== INVENTORY ROUTES ==========
 
 // Get user inventory
-app.get("/make-server-5d6242bb/inventory/:walletAddress", async (c) => {
+const getInventoryRoute = async (c: any) => {
   try {
     const { walletAddress } = c.req.param();
     const inventoryKeys = await kv.getByPrefix(`inventory:${walletAddress}:`);
@@ -1627,7 +1654,10 @@ app.get("/make-server-5d6242bb/inventory/:walletAddress", async (c) => {
     console.error("Error fetching inventory:", error);
     return c.json({ error: "Failed to fetch inventory" }, 500);
   }
-});
+};
+
+app.get("/inventory/:walletAddress", getInventoryRoute);
+app.get("/make-server-5d6242bb/inventory/:walletAddress", getInventoryRoute);
 
 // Add item to inventory
 app.post("/make-server-5d6242bb/inventory/:walletAddress", async (c) => {
@@ -2432,7 +2462,7 @@ app.get("/make-server-5d6242bb/admin/audit-logs", async (c) => {
 // ========== GAME INTEGRATION ROUTES ==========
 
 // Sync game data
-app.post("/make-server-5d6242bb/game/sync", async (c) => {
+const syncGameDataRoute = async (c: any) => {
   try {
     const { walletAddress, level, xp, achievements, itemsEarned } = await c.req.json();
     const auth = await verifyWalletAuth(c, "game:sync", walletAddress);
@@ -2507,9 +2537,12 @@ app.post("/make-server-5d6242bb/game/sync", async (c) => {
     console.error("Error syncing game data:", error);
     return c.json({ error: "Failed to sync game data" }, 500);
   }
-});
+};
 
-app.post("/make-server-5d6242bb/game/inventory-sync", async (c) => {
+app.post("/game/sync", syncGameDataRoute);
+app.post("/make-server-5d6242bb/game/sync", syncGameDataRoute);
+
+const syncGameInventoryRoute = async (c: any) => {
   try {
     const { walletAddress, inventoryItems, allowEmptySnapshot } = await c.req.json();
     const auth = await verifyWalletAuth(c, "game:inventory_sync", walletAddress);
@@ -2597,10 +2630,13 @@ app.post("/make-server-5d6242bb/game/inventory-sync", async (c) => {
     console.error("Error syncing inventory snapshot:", error);
     return c.json({ error: "Failed to sync inventory snapshot" }, 500);
   }
-});
+};
+
+app.post("/game/inventory-sync", syncGameInventoryRoute);
+app.post("/make-server-5d6242bb/game/inventory-sync", syncGameInventoryRoute);
 
 // Trigger game event
-app.post("/make-server-5d6242bb/game/event", async (c) => {
+const triggerGameEventRoute = async (c: any) => {
   try {
     const { walletAddress, eventType, eventData } = await c.req.json();
     const auth = await verifyWalletAuth(c, "game:event", walletAddress);
@@ -2626,6 +2662,9 @@ app.post("/make-server-5d6242bb/game/event", async (c) => {
     console.error("Error triggering game event:", error);
     return c.json({ error: "Failed to trigger game event" }, 500);
   }
-});
+};
+
+app.post("/game/event", triggerGameEventRoute);
+app.post("/make-server-5d6242bb/game/event", triggerGameEventRoute);
 
 Deno.serve(app.fetch);
