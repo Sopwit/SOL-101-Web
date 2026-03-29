@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useWallet } from '@solana/wallet-adapter-react';
+import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
+import { Transaction, VersionedTransaction } from '@solana/web3.js';
 import { CheckCircle2, Link2, PenSquare, Wallet } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { GlassCard } from '../components/GlassCard';
 import { useLanguage } from '../contexts/LanguageContext';
 import { appendParamsToCallback, isAllowedWalletBridgeCallback, parseWalletBridgeSearch } from '../lib/walletBridge';
+import { createWalletAuth } from '../lib/walletAuth';
+import { api } from '../services/api';
 const allowedCallbackPrefixes = (import.meta.env.VITE_WALLET_BRIDGE_ALLOWED_CALLBACK_PREFIXES as string | undefined)
   ?.split(',')
   .map((value) => value.trim())
@@ -24,15 +27,30 @@ function redirectToCallback(callback: string, params: Record<string, string>) {
 }
 
 export function WalletBridgePage() {
+  const { connection } = useConnection();
   const wallet = useWallet();
   const { t } = useLanguage();
-  const { action, callback, message } = useMemo(() => parseWalletBridgeSearch(window.location.search), []);
+  const { action, callback, message, sessionId } = useMemo(() => parseWalletBridgeSearch(window.location.search), []);
   const [statusText, setStatusText] = useState(t('walletBridge.waiting'));
   const [errorText, setErrorText] = useState('');
+  const [nativeKind, setNativeKind] = useState<'connect' | 'sign-message' | 'sign-transaction' | null>(null);
+  const [nativeAction, setNativeAction] = useState('');
+  const [nativeMessage, setNativeMessage] = useState('');
   const autoActionStarted = useRef(false);
   const callbackAllowed = useMemo(() => isAllowedCallback(callback), [callback]);
+  const nativeMode = Boolean(sessionId);
 
   const handleCancel = () => {
+    if (nativeMode) {
+      if (!sessionId) {
+        return;
+      }
+
+      void api.cancelNativeWalletSession(sessionId);
+      setStatusText('Istek iptal edildi.');
+      return;
+    }
+
     if (!callbackAllowed) {
       setErrorText(t('walletBridge.invalidCallback'));
       return;
@@ -45,6 +63,40 @@ export function WalletBridgePage() {
   };
 
   useEffect(() => {
+    if (!nativeMode) {
+      return;
+    }
+
+    if (!sessionId) {
+      setErrorText('Native wallet session kimligi eksik.');
+      return;
+    }
+
+    void (async () => {
+      const response = await api.getNativeWalletSession(sessionId);
+      if (!response.success || !response.data) {
+        setErrorText(response.error || 'Native wallet session yuklenemedi.');
+        return;
+      }
+
+      setNativeKind(response.data.kind);
+      setNativeAction(response.data.authAction);
+      setNativeMessage(response.data.requestedMessage || '');
+      setStatusText(
+        response.data.kind === 'sign-transaction'
+          ? 'Transaction onayi bekleniyor...'
+          : response.data.kind === 'sign-message'
+            ? t('walletBridge.requestingSignature')
+            : t('walletBridge.waiting')
+      );
+    })();
+  }, [nativeMode, sessionId, t]);
+
+  useEffect(() => {
+    if (nativeMode) {
+      return;
+    }
+
     if (!callback && action) {
       setErrorText(t('walletBridge.missingCallback'));
       return;
@@ -56,6 +108,10 @@ export function WalletBridgePage() {
   }, [action, callback, callbackAllowed, t]);
 
   useEffect(() => {
+    if (nativeMode) {
+      return;
+    }
+
     if (!wallet.connected || !wallet.publicKey || autoActionStarted.current || !callbackAllowed) {
       return;
     }
@@ -98,6 +154,83 @@ export function WalletBridgePage() {
     }
   }, [action, callback, message, t, wallet]);
 
+  useEffect(() => {
+    if (!nativeMode || !wallet.connected || !wallet.publicKey || autoActionStarted.current || !nativeKind || !nativeAction || !sessionId) {
+      return;
+    }
+
+    autoActionStarted.current = true;
+
+    void (async () => {
+      const walletAuth = await createWalletAuth(wallet, nativeAction);
+      if (!walletAuth) {
+        autoActionStarted.current = false;
+        setErrorText(t('walletBridge.signatureProcessFailed'));
+        setStatusText(t('walletBridge.signatureFailed'));
+        return;
+      }
+
+      try {
+        if (nativeKind === 'connect') {
+          const response = await api.completeNativeWalletSession(sessionId, {}, walletAuth);
+          if (!response.success) {
+            throw new Error(response.error || 'Native connect tamamlama basarisiz.');
+          }
+
+          setStatusText('Wallet baglandi. Unity uygulamasina donebilirsiniz.');
+          return;
+        }
+
+        if (nativeKind === 'sign-message') {
+          if (!wallet.signMessage || !nativeMessage) {
+            throw new Error(t('walletBridge.signUnsupported'));
+          }
+
+          const signatureBytes = await wallet.signMessage(new TextEncoder().encode(nativeMessage));
+          const binary = Array.from(signatureBytes, (byte) => String.fromCharCode(byte)).join('');
+          const signatureBase64 = btoa(binary);
+          const response = await api.completeNativeWalletSession(sessionId, { signatureBase64 }, walletAuth);
+          if (!response.success) {
+            throw new Error(response.error || 'Mesaj imzalama oturumu tamamlanamadi.');
+          }
+
+          setStatusText('Mesaj imzalandi. Unity uygulamasina donebilirsiniz.');
+          return;
+        }
+
+        if (!wallet.sendTransaction) {
+          throw new Error('Bagli wallet transaction gondermeyi desteklemiyor.');
+        }
+
+        const transactionBase64 = (await api.getNativeWalletSession(sessionId)).data?.transactionBase64;
+        if (!transactionBase64) {
+          throw new Error('Imzalanacak transaction bulunamadi.');
+        }
+
+        const transactionBytes = Uint8Array.from(atob(transactionBase64), (char) => char.charCodeAt(0));
+        let transaction: Transaction | VersionedTransaction;
+
+        try {
+          transaction = VersionedTransaction.deserialize(transactionBytes);
+        } catch {
+          transaction = Transaction.from(transactionBytes);
+        }
+
+        const transactionSignature = await wallet.sendTransaction(transaction, connection);
+        const response = await api.completeNativeWalletSession(sessionId, { transactionSignature }, walletAuth);
+        if (!response.success) {
+          throw new Error(response.error || 'Transaction oturumu tamamlanamadi.');
+        }
+
+        setStatusText('Transaction gonderildi. Unity uygulamasina donebilirsiniz.');
+      } catch (error) {
+        autoActionStarted.current = false;
+        setErrorText(error instanceof Error ? error.message : t('walletBridge.signatureProcessFailed'));
+        setStatusText(t('walletBridge.signatureFailed'));
+      }
+    })();
+  }, [connection, nativeAction, nativeKind, nativeMessage, nativeMode, sessionId, t, wallet]);
+
   return (
     <main className="min-h-screen flex items-center justify-center px-4 py-16 md:px-6">
       <GlassCard className="w-full max-w-3xl overflow-hidden p-0">
@@ -122,7 +255,17 @@ export function WalletBridgePage() {
                   {action === 'connect' ? <Wallet className="h-5 w-5" /> : <PenSquare className="h-5 w-5" />}
                 </div>
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">{t('walletBridge.action')}</p>
-                <p className="mt-2 text-lg font-semibold">{action === 'connect' ? t('walletBridge.connectWallet') : t('walletBridge.signMessage')}</p>
+                <p className="mt-2 text-lg font-semibold">
+                  {nativeMode
+                    ? nativeKind === 'sign-transaction'
+                      ? 'Transaction imzala'
+                      : nativeKind === 'sign-message'
+                        ? t('walletBridge.signMessage')
+                        : t('walletBridge.connectWallet')
+                    : action === 'connect'
+                      ? t('walletBridge.connectWallet')
+                      : t('walletBridge.signMessage')}
+                </p>
               </div>
               <div className="rounded-[1.35rem] border border-border/60 bg-background/60 p-4">
                 <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-secondary/15 text-secondary">
@@ -148,7 +291,7 @@ export function WalletBridgePage() {
               </div>
             )}
 
-            {allowedCallbackPrefixes.length > 0 && (
+            {!nativeMode && allowedCallbackPrefixes.length > 0 && (
               <div className="rounded-[1.35rem] border border-border/60 bg-background/50 p-4 text-xs leading-6 text-muted-foreground">
                 {t('walletBridge.allowedPrefixes')}: {allowedCallbackPrefixes.join(', ')}
               </div>
@@ -160,7 +303,7 @@ export function WalletBridgePage() {
               </div>
             )}
 
-            {action === 'sign' && wallet.connected && !wallet.signMessage && (
+            {!nativeMode && action === 'sign' && wallet.connected && !wallet.signMessage && (
               <div className="rounded-[1.35rem] border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-200">
                 {t('walletBridge.signUnsupported')}
               </div>

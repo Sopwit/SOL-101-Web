@@ -23,8 +23,32 @@ type AuthClaims = {
   timestamp: number;
 };
 
+type NativeWalletSessionKind = "connect" | "sign-message" | "sign-transaction";
+
+type NativeWalletSessionStatus = "pending" | "completed" | "failed" | "cancelled";
+
+type NativeWalletSessionRecord = {
+  id: string;
+  pollToken: string;
+  kind: NativeWalletSessionKind;
+  authAction: string;
+  requestedMessage: string | null;
+  transactionBase64: string | null;
+  status: NativeWalletSessionStatus;
+  walletAddress: string | null;
+  signatureBase64: string | null;
+  transactionSignature: string | null;
+  playerSessionToken: string | null;
+  error: string | null;
+  createdAt: string;
+  updatedAt: string;
+  expiresAt: string;
+};
+
 const AUTH_MAX_AGE_MS = 5 * 60 * 1000;
 const ADMIN_SESSION_TTL_MS = 20 * 60 * 1000;
+const NATIVE_WALLET_SESSION_TTL_MS = 10 * 60 * 1000;
+const NATIVE_PLAYER_SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 const XP_PER_LEVEL = 120;
 const DUAN_SHOP_ACHIEVEMENT_BYTES = 32;
 const DEFAULT_SOL_USD_PRICE = 0;
@@ -33,6 +57,11 @@ const UNITY_EDITOR_DEV_AUTH_SECRET = Deno.env.get("UNITY_EDITOR_DEV_AUTH_SECRET"
 const DUAN_SHOP_PROGRAM_ID = new anchor.web3.PublicKey(
   Deno.env.get("DUAN_SHOP_PROGRAM_ID") ?? duanShopIdl.address,
 );
+
+function generateOpaqueToken(byteLength = 24) {
+  const bytes = crypto.getRandomValues(new Uint8Array(byteLength));
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
 
 async function fetchLiveSolUsdPrice() {
   const controller = new AbortController();
@@ -665,16 +694,39 @@ function parseAuthClaims(rawMessage: string): AuthClaims | null {
 
 async function verifyWalletAuth(c: any, expectedAction: string, expectedWalletAddress: string) {
   const walletAddress = c.req.header("x-wallet-address");
+  const playerSessionToken = c.req.header("x-player-session-token");
   const signatureBase64 = c.req.header("x-wallet-signature");
   const rawMessage = c.req.header("x-wallet-message");
   const editorDevAuth = c.req.header("x-duan-dev-auth");
 
-  if (!walletAddress || !rawMessage) {
-    return { ok: false, status: 401, error: "Missing wallet authentication headers" };
+  if (!walletAddress) {
+    return { ok: false, status: 401, error: "Missing wallet address header" };
   }
 
   if (walletAddress !== expectedWalletAddress) {
     return { ok: false, status: 403, error: "Wallet header does not match request wallet address" };
+  }
+
+  if (playerSessionToken) {
+    const session = await kv.get(`native-player-session:${playerSessionToken}`);
+    if (!session) {
+      return { ok: false, status: 401, error: "Player session not found" };
+    }
+
+    if (new Date(session.expiresAt).getTime() <= Date.now()) {
+      await kv.del(`native-player-session:${playerSessionToken}`);
+      return { ok: false, status: 401, error: "Player session expired" };
+    }
+
+    if (String(session.walletAddress) !== expectedWalletAddress) {
+      return { ok: false, status: 403, error: "Player session wallet mismatch" };
+    }
+
+    return { ok: true, mode: "native-player-session" };
+  }
+
+  if (!rawMessage) {
+    return { ok: false, status: 401, error: "Missing wallet authentication headers" };
   }
 
   const claims = parseAuthClaims(rawMessage);
@@ -743,8 +795,7 @@ async function verifyAdminWalletAuth(c: any, expectedAction: string) {
 }
 
 function generateAdminSessionToken() {
-  const bytes = crypto.getRandomValues(new Uint8Array(24));
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return generateOpaqueToken();
 }
 
 async function createAdminSessionRecord(walletAddress: string) {
@@ -783,6 +834,104 @@ async function verifyAdminSession(c: any) {
   }
 
   return { ok: true, walletAddress: session.walletAddress, token, expiresAt: session.expiresAt };
+}
+
+function createNativeWalletSessionId() {
+  return `native_${generateOpaqueToken(12)}`;
+}
+
+function getNativeWalletAuthAction(sessionId: string, kind: NativeWalletSessionKind) {
+  return `native:${kind}:${sessionId}`;
+}
+
+function toPublicNativeWalletSession(session: NativeWalletSessionRecord) {
+  return {
+    id: session.id,
+    kind: session.kind,
+    status: session.status,
+    requestedMessage: session.requestedMessage,
+    transactionBase64: session.transactionBase64,
+    authAction: session.authAction,
+    error: session.error,
+    createdAt: session.createdAt,
+    updatedAt: session.updatedAt,
+    expiresAt: session.expiresAt,
+  };
+}
+
+function toPrivateNativeWalletSessionResult(session: NativeWalletSessionRecord) {
+  return {
+    id: session.id,
+    kind: session.kind,
+    status: session.status,
+    walletAddress: session.walletAddress,
+    signatureBase64: session.signatureBase64,
+    transactionSignature: session.transactionSignature,
+    playerSessionToken: session.playerSessionToken,
+    error: session.error,
+    createdAt: session.createdAt,
+    updatedAt: session.updatedAt,
+    expiresAt: session.expiresAt,
+  };
+}
+
+async function createNativePlayerSessionRecord(walletAddress: string) {
+  const token = generateOpaqueToken();
+  const now = new Date();
+  const session = {
+    token,
+    walletAddress,
+    createdAt: now.toISOString(),
+    expiresAt: new Date(now.getTime() + NATIVE_PLAYER_SESSION_TTL_MS).toISOString(),
+  };
+
+  await kv.set(`native-player-session:${token}`, session);
+  return session;
+}
+
+async function createNativeWalletSessionRecord(
+  kind: NativeWalletSessionKind,
+  requestedMessage: string | null,
+  transactionBase64: string | null,
+) {
+  const now = new Date();
+  const sessionId = createNativeWalletSessionId();
+  const session: NativeWalletSessionRecord = {
+    id: sessionId,
+    pollToken: generateOpaqueToken(),
+    kind,
+    authAction: getNativeWalletAuthAction(sessionId, kind),
+    requestedMessage,
+    transactionBase64,
+    status: "pending",
+    walletAddress: null,
+    signatureBase64: null,
+    transactionSignature: null,
+    playerSessionToken: null,
+    error: null,
+    createdAt: now.toISOString(),
+    updatedAt: now.toISOString(),
+    expiresAt: new Date(now.getTime() + NATIVE_WALLET_SESSION_TTL_MS).toISOString(),
+  };
+
+  await kv.set(`native-wallet-session:${session.id}`, session);
+  return session;
+}
+
+async function loadNativeWalletSession(sessionId: string) {
+  const session = await kv.get(`native-wallet-session:${sessionId}`) as NativeWalletSessionRecord | null;
+  if (!session) {
+    return null;
+  }
+
+  if (new Date(session.expiresAt).getTime() <= Date.now() && session.status === "pending") {
+    session.status = "failed";
+    session.error = "Session expired";
+    session.updatedAt = new Date().toISOString();
+    await kv.set(`native-wallet-session:${session.id}`, session);
+  }
+
+  return session;
 }
 
 async function deleteForumPostCascade(postId: string) {
@@ -850,12 +999,158 @@ app.use(
       "x-wallet-signature",
       "x-duan-dev-auth",
       "x-admin-token",
+      "x-player-session-token",
     ],
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     exposeHeaders: ["Content-Length"],
     maxAge: 600,
   }),
 );
+
+app.post("/make-server-5d6242bb/native-wallet/session", async (c) => {
+  try {
+    const payload = await c.req.json().catch(() => ({}));
+    const kind = payload?.kind as NativeWalletSessionKind | undefined;
+    const requestedMessage = typeof payload?.requestedMessage === "string" ? payload.requestedMessage : null;
+    const transactionBase64 = typeof payload?.transactionBase64 === "string" ? payload.transactionBase64 : null;
+
+    if (kind !== "connect" && kind !== "sign-message" && kind !== "sign-transaction") {
+      return c.json({ error: "Invalid native wallet session kind" }, 400);
+    }
+
+    if (kind === "sign-message" && !requestedMessage) {
+      return c.json({ error: "requestedMessage is required for sign-message sessions" }, 400);
+    }
+
+    if (kind === "sign-transaction" && !transactionBase64) {
+      return c.json({ error: "transactionBase64 is required for sign-transaction sessions" }, 400);
+    }
+
+    const session = await createNativeWalletSessionRecord(kind, requestedMessage, transactionBase64);
+    return c.json({
+      sessionId: session.id,
+      pollToken: session.pollToken,
+      authAction: session.authAction,
+      expiresAt: session.expiresAt,
+    });
+  } catch (error) {
+    console.error("Error creating native wallet session:", error);
+    return c.json({ error: "Failed to create native wallet session" }, 500);
+  }
+});
+
+app.get("/make-server-5d6242bb/native-wallet/session/:sessionId", async (c) => {
+  try {
+    const { sessionId } = c.req.param();
+    const session = await loadNativeWalletSession(sessionId);
+    if (!session) {
+      return c.json({ error: "Native wallet session not found" }, 404);
+    }
+
+    return c.json(toPublicNativeWalletSession(session));
+  } catch (error) {
+    console.error("Error loading native wallet session:", error);
+    return c.json({ error: "Failed to load native wallet session" }, 500);
+  }
+});
+
+app.get("/make-server-5d6242bb/native-wallet/session/:sessionId/result", async (c) => {
+  try {
+    const { sessionId } = c.req.param();
+    const pollToken = c.req.query("token");
+    const session = await loadNativeWalletSession(sessionId);
+    if (!session) {
+      return c.json({ error: "Native wallet session not found" }, 404);
+    }
+
+    if (!pollToken || pollToken !== session.pollToken) {
+      return c.json({ error: "Invalid native wallet session poll token" }, 403);
+    }
+
+    return c.json(toPrivateNativeWalletSessionResult(session));
+  } catch (error) {
+    console.error("Error loading native wallet session result:", error);
+    return c.json({ error: "Failed to load native wallet session result" }, 500);
+  }
+});
+
+app.post("/make-server-5d6242bb/native-wallet/session/:sessionId/complete", async (c) => {
+  try {
+    const { sessionId } = c.req.param();
+    const session = await loadNativeWalletSession(sessionId);
+    if (!session) {
+      return c.json({ error: "Native wallet session not found" }, 404);
+    }
+
+    if (session.status !== "pending") {
+      return c.json(toPublicNativeWalletSession(session));
+    }
+
+    const payload = await c.req.json().catch(() => ({}));
+    const walletAddress = c.req.header("x-wallet-address");
+    if (!walletAddress) {
+      return c.json({ error: "Missing wallet address header" }, 401);
+    }
+
+    const auth = await verifyWalletAuth(c, session.authAction, walletAddress);
+    if (!auth.ok) {
+      return c.json({ error: auth.error }, auth.status);
+    }
+
+    session.walletAddress = walletAddress;
+    session.error = null;
+
+    if (session.kind === "connect") {
+      const playerSession = await createNativePlayerSessionRecord(walletAddress);
+      session.playerSessionToken = playerSession.token;
+    } else if (session.kind === "sign-message") {
+      const signatureBase64 = typeof payload?.signatureBase64 === "string" ? payload.signatureBase64 : "";
+      if (!signatureBase64) {
+        return c.json({ error: "signatureBase64 is required for sign-message sessions" }, 400);
+      }
+
+      session.signatureBase64 = signatureBase64;
+    } else if (session.kind === "sign-transaction") {
+      const transactionSignature = typeof payload?.transactionSignature === "string" ? payload.transactionSignature : "";
+      if (!transactionSignature) {
+        return c.json({ error: "transactionSignature is required for sign-transaction sessions" }, 400);
+      }
+
+      session.transactionSignature = transactionSignature;
+    }
+
+    session.status = "completed";
+    session.updatedAt = new Date().toISOString();
+    await kv.set(`native-wallet-session:${session.id}`, session);
+
+    return c.json(toPublicNativeWalletSession(session));
+  } catch (error) {
+    console.error("Error completing native wallet session:", error);
+    return c.json({ error: "Failed to complete native wallet session" }, 500);
+  }
+});
+
+app.post("/make-server-5d6242bb/native-wallet/session/:sessionId/cancel", async (c) => {
+  try {
+    const { sessionId } = c.req.param();
+    const session = await loadNativeWalletSession(sessionId);
+    if (!session) {
+      return c.json({ error: "Native wallet session not found" }, 404);
+    }
+
+    if (session.status === "pending") {
+      session.status = "cancelled";
+      session.error = "User cancelled the session";
+      session.updatedAt = new Date().toISOString();
+      await kv.set(`native-wallet-session:${session.id}`, session);
+    }
+
+    return c.json(toPublicNativeWalletSession(session));
+  } catch (error) {
+    console.error("Error cancelling native wallet session:", error);
+    return c.json({ error: "Failed to cancel native wallet session" }, 500);
+  }
+});
 
 // Shop katalogu runtime baslangicinda ortak sabitlerden senkronize edilir.
 async function initializeShopItems() {

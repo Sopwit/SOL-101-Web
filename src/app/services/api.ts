@@ -81,6 +81,19 @@ export interface WalletAuthHeaders {
   signature: string;
 }
 
+export interface NativeWalletSession {
+  id: string;
+  kind: 'connect' | 'sign-message' | 'sign-transaction';
+  status: 'pending' | 'completed' | 'failed' | 'cancelled';
+  requestedMessage: string | null;
+  transactionBase64: string | null;
+  authAction: string;
+  error: string | null;
+  createdAt: string;
+  updatedAt: string;
+  expiresAt: string;
+}
+
 export interface AdminSession {
   token: string;
   walletAddress: string;
@@ -244,6 +257,27 @@ class ApiService {
 
   async createAdminSession(walletAuth: WalletAuthHeaders): Promise<ApiResponse<AdminSession>> {
     return this.request(`/admin/session`, { method: 'POST' }, walletAuth);
+  }
+
+  async getNativeWalletSession(sessionId: string): Promise<ApiResponse<NativeWalletSession>> {
+    return this.request(`/native-wallet/session/${sessionId}`, { method: 'GET' });
+  }
+
+  async completeNativeWalletSession(
+    sessionId: string,
+    data: Record<string, unknown>,
+    walletAuth: WalletAuthHeaders,
+  ): Promise<ApiResponse<NativeWalletSession>> {
+    return this.request(`/native-wallet/session/${sessionId}/complete`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }, walletAuth);
+  }
+
+  async cancelNativeWalletSession(sessionId: string): Promise<ApiResponse<NativeWalletSession>> {
+    return this.request(`/native-wallet/session/${sessionId}/cancel`, {
+      method: 'POST',
+    });
   }
 
   // Profile API

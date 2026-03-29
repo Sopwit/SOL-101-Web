@@ -5,7 +5,8 @@ export function parseWalletBridgeSearch(search: string) {
   const action = (params.get('action') === 'sign' ? 'sign' : 'connect') as BridgeAction;
   const callback = params.get('callback') ?? '';
   const message = params.get('message') ?? '';
-  return { action, callback, message };
+  const sessionId = params.get('session') ?? '';
+  return { action, callback, message, sessionId };
 }
 
 export function appendParamsToCallback(callback: string, params: Record<string, string>) {
