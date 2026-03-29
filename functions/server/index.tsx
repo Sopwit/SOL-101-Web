@@ -2560,6 +2560,9 @@ const syncGameInventoryRoute = async (c: any) => {
           .map((entry: any) => ({
             itemId: String(entry?.itemId ?? "").trim(),
             quantity: Math.max(0, Number(entry?.quantity ?? 0)),
+            storageType: String(entry?.storageType ?? "").trim().toLowerCase(),
+            slotIndex: Number.isFinite(Number(entry?.slotIndex)) ? Math.max(0, Math.floor(Number(entry?.slotIndex))) : null,
+            equipmentSlot: String(entry?.equipmentSlot ?? "").trim().toLowerCase(),
           }))
           .filter((entry: { itemId: string; quantity: number }) => entry.itemId && entry.quantity > 0)
       : [];
@@ -2588,20 +2591,33 @@ const syncGameInventoryRoute = async (c: any) => {
     let syncedStackCount = 0;
 
     for (const entry of normalizedEntries) {
-      const { itemId, quantity } = entry;
+      const { itemId, quantity, storageType, slotIndex, equipmentSlot } = entry;
       const item = await getShopItemById(itemId);
       if (!item) {
         console.warn(`Unknown itemId from inventory sync skipped: ${itemId}`);
         continue;
       }
 
+      const normalizedStorageType = storageType === "quickbar" || storageType === "equipment" || storageType === "inventory"
+        ? storageType
+        : "inventory";
+      const normalizedEquipmentSlot = normalizedStorageType === "equipment" && equipmentSlot
+        ? equipmentSlot
+        : null;
+      const locationKey = normalizedStorageType === "equipment"
+        ? normalizedEquipmentSlot ?? "unknown"
+        : String(slotIndex ?? syncedStackCount);
+
       const inventoryItem = {
-        id: `unity_${itemId}`,
+        id: `unity_${normalizedStorageType}_${locationKey}_${itemId}`,
         walletAddress,
         item,
         acquiredAt: new Date().toISOString(),
         source: "unity_snapshot",
         quantity,
+        storageType: normalizedStorageType,
+        slotIndex: normalizedStorageType === "equipment" ? null : slotIndex,
+        equipmentSlot: normalizedEquipmentSlot,
       };
 
       await kv.set(`inventory:${walletAddress}:${inventoryItem.id}`, inventoryItem);

@@ -85,6 +85,9 @@ export interface InventoryItem {
   purchasePrice?: number;
   txSignature?: string;
   quantity?: number;
+  storageType?: 'inventory' | 'quickbar' | 'equipment';
+  slotIndex?: number | null;
+  equipmentSlot?: string | null;
 }
 
 export type WantedType = 'token' | 'item' | 'both';
