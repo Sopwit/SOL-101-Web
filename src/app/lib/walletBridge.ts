@@ -1,7 +1,29 @@
 export type BridgeAction = 'connect' | 'sign';
 
-export function parseWalletBridgeSearch(search: string) {
-  const params = new URLSearchParams(search);
+function extractQueryFromHash(hash: string) {
+  if (!hash) {
+    return '';
+  }
+
+  const queryIndex = hash.indexOf('?');
+  if (queryIndex < 0 || queryIndex === hash.length - 1) {
+    return '';
+  }
+
+  return hash.slice(queryIndex + 1);
+}
+
+export function parseWalletBridgeSearch(search: string, hash = '') {
+  const searchParams = new URLSearchParams(search);
+  const hashParams = new URLSearchParams(extractQueryFromHash(hash));
+  const params = new URLSearchParams(searchParams.toString());
+
+  for (const [key, value] of hashParams.entries()) {
+    if (!params.has(key) && value) {
+      params.set(key, value);
+    }
+  }
+
   const action = (params.get('action') === 'sign' ? 'sign' : 'connect') as BridgeAction;
   const callback = params.get('callback') ?? '';
   const message = params.get('message') ?? '';

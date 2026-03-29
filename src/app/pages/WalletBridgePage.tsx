@@ -30,7 +30,10 @@ export function WalletBridgePage() {
   const { connection } = useConnection();
   const wallet = useWallet();
   const { t } = useLanguage();
-  const { action, callback, message, sessionId } = useMemo(() => parseWalletBridgeSearch(window.location.search), []);
+  const { action, callback, message, sessionId } = useMemo(
+    () => parseWalletBridgeSearch(window.location.search, window.location.hash),
+    []
+  );
   const [statusText, setStatusText] = useState(t('walletBridge.waiting'));
   const [errorText, setErrorText] = useState('');
   const [nativeKind, setNativeKind] = useState<'connect' | 'sign-message' | 'sign-transaction' | null>(null);
